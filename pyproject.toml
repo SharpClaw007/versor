@@ -2,6 +2,7 @@
 name = "versor"
 version = "0.1.0"
 description = "A language where the program is the path: instructions are vectors, programs are polylines through 3D space."
+license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = ["numpy>=1.26", "matplotlib>=3.8"]
 

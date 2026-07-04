@@ -17,6 +17,7 @@ its net displacement. This is the v0.1 reference implementation — interpreter,
 [![Matplotlib](https://img.shields.io/badge/Matplotlib-3-11557C)](https://matplotlib.org/)
 [![Tests](https://img.shields.io/badge/tests-69%20passing-brightgreen)](tests/)
 [![Spec](https://img.shields.io/badge/spec-v0.1-a855f7)](versor-design.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 <br />
 
@@ -207,3 +208,7 @@ print(Machine(b.build()).run().out)   # [5.0, 4.0, 3.0, 2.0, 1.0]
 
 The decoder is pluggable (`versor/decode.py`) so M6 slots in without touching
 the machine.
+
+## License
+
+**MIT.** Copyright © 2026 Juan Reyes. See [LICENSE](LICENSE) for full terms.
