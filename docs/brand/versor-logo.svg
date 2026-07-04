@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="76" height="76" viewBox="0 0 76 76">
+  <!-- A program as the visualizer draws it: colored instruction segments,
+       dashed net-displacement chord, green start dot, red end square. -->
+  <path d="M12 62 L64 30" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="4 4"/>
+  <g fill="none" stroke-linecap="round" stroke-width="7">
+    <path d="M12 62 L34 50" stroke="#14b8a6"/>
+    <path d="M34 50 L30 26" stroke="#ff7f50"/>
+    <path d="M30 26 L52 14" stroke="#a855f7"/>
+    <path d="M52 14 L64 30" stroke="#6b7280"/>
+  </g>
+  <circle cx="12" cy="62" r="5.5" fill="#16a34a"/>
+  <rect x="58.5" y="24.5" width="11" height="11" fill="#dc2626"/>
+</svg>
