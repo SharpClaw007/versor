@@ -17,6 +17,7 @@ its net displacement. This is the v0.1 reference implementation — interpreter,
 [![Matplotlib](https://img.shields.io/badge/Matplotlib-3-11557C)](https://matplotlib.org/)
 [![Tests](https://img.shields.io/badge/tests-114%20passing-brightgreen)](tests/)
 [![Spec](https://img.shields.io/badge/spec-v0.1-a855f7)](versor-design.md)
+[![Whitepaper](https://img.shields.io/badge/math-whitepaper-14b8a6)](docs/whitepaper.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 <br />
@@ -38,7 +39,11 @@ instructions. Because 3D rotations don't commute, frame rotation is the
 expressive core of the language: the hero image above is one identical
 frame-local program repeated eight times, corkscrewed through world space purely
 by an accumulating twist. Full language definition in
-[`versor-design.md`](versor-design.md).
+[`versor-design.md`](versor-design.md); the mathematics — quaternion double
+cover, decoding as sphere partitions, the frame-covariance theorem, loops as
+screw motions, and the geometry of program space — is worked out in the
+[whitepaper](docs/whitepaper.md), with every numeric claim reproduced by
+[`docs/calcs.py`](docs/calcs.py).
 
 ## Features
 
@@ -142,7 +147,7 @@ versor/
 └── examples.py    # The milestone programs, one source of truth
 tests/             # 114 tests: quat, decode, ISA, loader, asm, viz, milestones, M6
 examples/          # Generated .vsr files, hand-written .vasm, renders
-docs/              # Brand assets + README screenshots
+docs/              # Whitepaper + calcs.py + brand assets + screenshots
 ```
 
 ## Getting started
