@@ -1,0 +1,14 @@
+; countdown, hand-written in Versor assembly
+; assemble: python -m versor asm examples/countdown.vasm
+; or run directly: python -m versor run examples/countdown.vasm
+
+.name countdown
+
+.chain entry
+        LOADI 1
+        MOVR r0                          ; R0 = unit decrement
+        LOADI 5                          ; A = counter
+loop:   OUT
+        SUB r0
+        BR -x: HALT -> end, +x: NOP -> loop
+        ; exit listed first: wins the tie when A hits (0,0,0)

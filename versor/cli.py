@@ -11,6 +11,14 @@ from .machine import DEFAULT_STEP_BUDGET, Machine, RunResult
 from .trace import Trace
 
 
+def _load_any(path: str):
+    """Load .vsr directly; assemble .vasm on the fly."""
+    if path.endswith(".vasm"):
+        from .asm import assemble_path
+        return assemble_path(path).build()
+    return load(path)
+
+
 def _print_result(res: RunResult) -> None:
     text = res.out_text()
     if text:
@@ -22,7 +30,7 @@ def _print_result(res: RunResult) -> None:
 
 def cmd_run(args) -> int:
     try:
-        prog = load(args.file)
+        prog = _load_any(args.file)
     except LoadError as e:
         print(f"load error: {e}", file=sys.stderr)
         return 2
@@ -55,7 +63,7 @@ def cmd_run(args) -> int:
 
 def cmd_lint(args) -> int:
     try:
-        prog = load(args.file)
+        prog = _load_any(args.file)
     except LoadError as e:
         print(f"load error: {e}", file=sys.stderr)
         return 2
@@ -65,6 +73,25 @@ def cmd_lint(args) -> int:
     n_segs = sum(len(es) for ch in prog.chains for es in ch.vertices.values())
     print(f"ok: {prog.name or args.file} — {n_chains} chain(s), {n_segs} segment(s), "
           f"{len(prog.warnings)} warning(s)")
+    return 0
+
+
+def cmd_asm(args) -> int:
+    import os
+
+    from .asm import assemble_path
+    try:
+        pb = assemble_path(args.file)
+        out = args.out or os.path.splitext(args.file)[0] + ".vsr"
+        prog = pb.save(out)
+    except LoadError as e:
+        print(f"asm error: {e}", file=sys.stderr)
+        return 2
+    for w in prog.warnings:
+        print(f"warning: {w}", file=sys.stderr)
+    n_segs = sum(len(es) for ch in prog.chains for es in ch.vertices.values())
+    print(f"{out}: {len(prog.chains)} chain(s), {n_segs} segment(s), "
+          f"decoder {prog.decoder}")
     return 0
 
 
@@ -83,9 +110,15 @@ def main(argv=None) -> int:
                     help="override the program's decoder")
     pr.set_defaults(fn=cmd_run)
 
-    pl = sub.add_parser("lint", help="validate a .vsr program")
+    pl = sub.add_parser("lint", help="validate a .vsr/.vasm program")
     pl.add_argument("file")
     pl.set_defaults(fn=cmd_lint)
+
+    pa = sub.add_parser("asm", help="assemble a .vasm file to .vsr")
+    pa.add_argument("file")
+    pa.add_argument("-o", "--out", default=None,
+                    help="output path (default: input with .vsr extension)")
+    pa.set_defaults(fn=cmd_asm)
 
     args = p.parse_args(argv)
     return args.fn(args)

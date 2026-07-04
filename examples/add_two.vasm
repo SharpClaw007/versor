@@ -1,0 +1,18 @@
+; add_two (M3) in Versor assembly: orientation is the argument.
+; The same chain is called twice; the pi frame rotation between the calls
+; flips which branch arm wins, so the two calls sweep different displacements.
+
+.name add_two
+
+.chain main
+        LOADI 1          ; A = world +x, the branch input for both calls
+        CALL fork
+        OUT              ; prints 0.6
+        ROTH pi          ; segments after this are re-aimed automatically
+        CALL fork
+        OUT              ; prints -2.5
+        HALT
+
+.chain fork
+        BR (1,0,0): LOADI 0.6 -> a, (-1,0,0): LOADI 2.5 -> b
+        ; a and b are never defined: dead-end vertices, implicit RET

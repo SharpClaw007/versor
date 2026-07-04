@@ -15,7 +15,7 @@ its net displacement. This is the v0.1 reference implementation — interpreter,
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![NumPy](https://img.shields.io/badge/NumPy-2-013243?logo=numpy&logoColor=white)](https://numpy.org/)
 [![Matplotlib](https://img.shields.io/badge/Matplotlib-3-11557C)](https://matplotlib.org/)
-[![Tests](https://img.shields.io/badge/tests-84%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-112%20passing-brightgreen)](tests/)
 [![Spec](https://img.shields.io/badge/spec-v0.1-a855f7)](versor-design.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -58,6 +58,9 @@ by an accumulating twist. Full language definition in
   by opcode class, branch diamonds, dashed net-displacement chord, GIF animation.
 - **Fluent builder** — authors programs in frame-local intent and tracks the
   authoring frame, so helpers still emit correct raw vectors after rotations.
+- **Assembler** — a text syntax (`.vasm`) with labels, named chains, guard
+  shorthand, and `pi`-expression angles; `versor asm` compiles it to `.vsr`,
+  and `versor run` executes it directly.
 - **Load-time lint + located faults** — dead-zone warnings at load;
   `AmbiguousDirection`, `DivisionByZero`, `CallStackOverflow`, `StackUnderflow`,
   `StepBudgetExhausted` and friends carry step/chain/vertex.
@@ -109,13 +112,14 @@ versor/
 ├── machine.py     # Machine state + step() + run()
 ├── loader.py      # .vsr JSON <-> chain graphs, validation, lint
 ├── builder.py     # Fluent authoring API with frame tracking
+├── asm.py         # .vasm text assembler (front-end over the builder)
 ├── interp.py      # M6: program-space lerp + interpolant classification
 ├── trace.py       # Per-step execution records
 ├── viz.py         # 3D renders + animation
 ├── cli.py         # python -m versor run | lint
 └── examples.py    # The milestone programs, one source of truth
-tests/             # 84 tests: quat, decode, ISA, loader, milestones, M6
-examples/          # Generated .vsr files + renders + make_examples.py
+tests/             # 112 tests: quat, decode, ISA, loader, asm, milestones, M6
+examples/          # Generated .vsr files, hand-written .vasm, renders
 docs/              # Brand assets + README screenshots
 ```
 
@@ -131,33 +135,62 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 
 | Command                                        | Description                              |
 |------------------------------------------------|------------------------------------------|
-| `python -m versor run FILE.vsr`                | Run a program, print its OUT buffer      |
+| `python -m versor run FILE.vsr`                | Run a program (also accepts `.vasm`)     |
 | `python -m versor run FILE.vsr --trace out.png`| Also render the executed path            |
 | `python -m versor run FILE.vsr --animate out.gif` | Growing-path GIF animation            |
 | `python -m versor run FILE.vsr --decoder icosa32` | Override the program's decoder        |
+| `python -m versor asm FILE.vasm [-o out.vsr]`  | Assemble Versor assembly to `.vsr`       |
 | `python -m versor lint FILE.vsr`               | Validate + dead-zone lint                |
 | `python examples/make_examples.py`             | Regenerate all example .vsr + renders    |
 | `python examples/interpolate.py`               | Regenerate the M6 interpolation study    |
 | `python -m pytest`                             | Run the test suite                       |
 
-Programs are authored with the builder (hand-writing raw vectors is possible but
-masochistic):
+Programs are authored in Versor assembly (hand-writing raw vectors is possible
+but masochistic):
+
+```asm
+.name countdown
+
+.chain entry
+        LOADI 1
+        MOVR r0                          ; R0 = unit decrement
+        LOADI 5                          ; A = counter
+loop:   OUT
+        SUB r0
+        BR -x: HALT -> end, +x: NOP -> loop
+        ; exit listed first: wins the tie when A hits (0,0,0)
+```
+
+```bash
+$ python -m versor run examples/countdown.vasm
+5
+4
+3
+2
+1
+```
+
+...or with the Python builder, which the assembler compiles down to:
 
 ```python
 from versor import ProgramBuilder, Machine, arm
 
 b = ProgramBuilder("countdown")
 c = b.chain("entry")
-c.loadi(1).movr(0)      # R0 = unit decrement
-c.loadi(5)              # A = counter
+c.loadi(1).movr(0).loadi(5)
 c.label("loop")
 c.out().sub(0)
 c.branch(
-    arm("HALT", 1.0, guard=(-1, 0, 0), to="end"),  # listed first: wins the A=0 tie
+    arm("HALT", 1.0, guard=(-1, 0, 0), to="end"),
     arm("NOP", 1.0, guard=(1, 0, 0), to="loop"),
 )
 print(Machine(b.build()).run().out)   # [5.0, 4.0, 3.0, 2.0, 1.0]
 ```
+
+Both front-ends track an *authoring frame*: after `ROTH pi` (or `c.roth(pi)`),
+later instructions emit raw vectors pre-rotated so they still decode to the
+intended opcode at runtime — see [`examples/add_two.vasm`](examples/add_two.vasm)
+for chains, `CALL` by name, and frame rotation in assembly.
 
 ## Semantics notes
 
