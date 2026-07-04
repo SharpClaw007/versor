@@ -21,6 +21,7 @@ class StepRecord:
     A: np.ndarray            # accumulator after execution
     skipped: bool = False    # segment moved but was not executed (JMPZ/JMPP)
     branch: bool = False     # segment was chosen at a branch vertex
+    out_len: int = 0         # length of the OUT buffer after this step
 
 
 class Trace:

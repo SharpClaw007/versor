@@ -15,7 +15,7 @@ its net displacement. This is the v0.1 reference implementation — interpreter,
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![NumPy](https://img.shields.io/badge/NumPy-2-013243?logo=numpy&logoColor=white)](https://numpy.org/)
 [![Matplotlib](https://img.shields.io/badge/Matplotlib-3-11557C)](https://matplotlib.org/)
-[![Tests](https://img.shields.io/badge/tests-112%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-114%20passing-brightgreen)](tests/)
 [![Spec](https://img.shields.io/badge/spec-v0.1-a855f7)](versor-design.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -54,8 +54,10 @@ by an accumulating twist. Full language definition in
   the pointer, and walking is pointer arithmetic.
 - **Loops are helices** — a loop is literally a cycle in the chain graph; in
   space each lap is the same shape translated by the body's net displacement.
-- **First-class visualizer** — every run can render its trace: segments colored
-  by opcode class, branch diamonds, dashed net-displacement chord, GIF animation.
+- **First-class visualizer** — every run can render its trace (segments colored
+  by opcode class, branch diamonds, dashed net-displacement chord) or an
+  execution GIF with a machine cursor, live frame triad, and a step/opcode/
+  accumulator/OUT HUD.
 - **Fluent builder** — authors programs in frame-local intent and tracks the
   authoring frame, so helpers still emit correct raw vectors after rotations.
 - **Assembler** — a text syntax (`.vasm`) with labels, named chains, guard
@@ -93,6 +95,26 @@ by an accumulating twist. Full language definition in
 > Every image is a real execution trace rendered by `versor/viz.py` — regenerate
 > them all with `python examples/make_examples.py`.
 
+### Watch it compute
+
+`versor run FILE --animate out.gif` renders the execution itself: the path
+grows step by step, the black cursor is the machine, the RGB triad is the live
+orientation frame `F` (watch it twist on every purple segment), and the HUD
+tracks step, opcode, accumulator, and the OUT buffer.
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/countdown.gif" alt="Animated countdown execution: the cursor walks the loop while the HUD prints 5 4 3 2 1" /><br />
+      <sub><b>countdown.vsr</b> — five laps of the cycle; the HUD's OUT line fills up as the loop drains the accumulator.</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/helix.gif" alt="Animated helix execution: the frame triad rotates 45 degrees each lap, curling the path into a corkscrew" /><br />
+      <sub><b>helix.vsr</b> — the triad turns 45° per lap, so the same frame-local instructions corkscrew through world space.</sub>
+    </td>
+  </tr>
+</table>
+
 ## Tech stack
 
 | Layer         | Technology                                                        |
@@ -118,7 +140,7 @@ versor/
 ├── viz.py         # 3D renders + animation
 ├── cli.py         # python -m versor run | lint
 └── examples.py    # The milestone programs, one source of truth
-tests/             # 112 tests: quat, decode, ISA, loader, asm, milestones, M6
+tests/             # 114 tests: quat, decode, ISA, loader, asm, viz, milestones, M6
 examples/          # Generated .vsr files, hand-written .vasm, renders
 docs/              # Brand assets + README screenshots
 ```
@@ -137,7 +159,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 |------------------------------------------------|------------------------------------------|
 | `python -m versor run FILE.vsr`                | Run a program (also accepts `.vasm`)     |
 | `python -m versor run FILE.vsr --trace out.png`| Also render the executed path            |
-| `python -m versor run FILE.vsr --animate out.gif` | Growing-path GIF animation            |
+| `python -m versor run FILE.vsr --animate out.gif` | Execution GIF (cursor, frame triad, HUD); `--fps`, `--spin` |
 | `python -m versor run FILE.vsr --decoder icosa32` | Override the program's decoder        |
 | `python -m versor asm FILE.vasm [-o out.vsr]`  | Assemble Versor assembly to `.vsr`       |
 | `python -m versor lint FILE.vsr`               | Validate + dead-zone lint                |

@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from versor import Machine, Trace  # noqa: E402
 from versor.examples import ALL  # noqa: E402
-from versor.viz import render  # noqa: E402
+from versor.viz import animate, render  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RENDERS = os.path.join(HERE, "renders")
@@ -37,6 +37,15 @@ def main():
                   title="helix.vsr — one local program, corkscrewed by its frame",
                   elev=16, azim=-55, figsize=(14, 6.5))
     print(f"{'hero':14s} -> {hero}")
+
+    # execution GIFs for the README (kept to two to stay repo-lean)
+    for name, kw in (("countdown", {}), ("helix", {"fps": 8})):
+        trace = Trace()
+        m = Machine(ALL[name]().build(), trace=trace)
+        m.run()
+        gif = animate(trace, os.path.join(SCREENSHOTS, f"{name}.gif"),
+                      title=f"{name}.vsr", out=m.OUT, **kw)
+        print(f"{name + '.gif':14s} -> {gif}")
 
 
 if __name__ == "__main__":

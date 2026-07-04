@@ -138,7 +138,8 @@ class Machine:
                     self.trace.record(
                         step=self.steps, chain=self.chain, frm=frm, to=self.vertex,
                         P0=self.P.copy(), P1=self.P.copy(), F=self.F.as_tuple(),
-                        opcode="RET*", klass="control", n=0.0, A=self.A.copy())
+                        opcode="RET*", klass="control", n=0.0, A=self.A.copy(),
+                        out_len=len(self.OUT))
             return
 
         is_branch = len(edges) > 1
@@ -178,7 +179,7 @@ class Machine:
                 step=self.steps, chain=self.chain, frm=frm, to=self.vertex,
                 P0=p0, P1=p0 + v_raw, F=self.F.as_tuple(), opcode=op.mnemonic,
                 klass=op.klass, n=n, A=self.A.copy(), skipped=skipped,
-                branch=is_branch)
+                branch=is_branch, out_len=len(self.OUT))
 
     def run(self) -> RunResult:
         while not self.halted:

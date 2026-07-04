@@ -56,8 +56,9 @@ def cmd_run(args) -> int:
             print(f"-- trace image: {viz.render(trace, args.trace, title=title)}",
                   file=sys.stderr)
         if args.animate:
-            print(f"-- animation: {viz.animate(trace, args.animate, title=title)}",
-                  file=sys.stderr)
+            gif = viz.animate(trace, args.animate, title=title, out=m.OUT,
+                              fps=args.fps, spin=args.spin)
+            print(f"-- animation: {gif}", file=sys.stderr)
     return code
 
 
@@ -103,7 +104,11 @@ def main(argv=None) -> int:
     pr = sub.add_parser("run", help="run a .vsr program")
     pr.add_argument("file")
     pr.add_argument("--trace", metavar="OUT.png", help="render executed path")
-    pr.add_argument("--animate", metavar="OUT.gif", help="animate executed path")
+    pr.add_argument("--animate", metavar="OUT.gif",
+                    help="render an execution animation (cursor, frame triad, HUD)")
+    pr.add_argument("--fps", type=int, default=12, help="animation frames/sec")
+    pr.add_argument("--spin", type=float, default=0.0,
+                    help="camera degrees per animation frame")
     pr.add_argument("--steps", type=int, default=DEFAULT_STEP_BUDGET,
                     help="step budget (default 1e6)")
     pr.add_argument("--decoder", choices=sorted(DECODERS), default=None,
