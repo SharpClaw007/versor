@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .decode import DECODERS
 from .errors import LoadError, VersorFault
 from .loader import load
 from .machine import DEFAULT_STEP_BUDGET, Machine, RunResult
@@ -29,7 +30,7 @@ def cmd_run(args) -> int:
         print(f"warning: {w}", file=sys.stderr)
 
     trace = Trace() if (args.trace or args.animate) else None
-    m = Machine(prog, step_budget=args.steps, trace=trace)
+    m = Machine(prog, step_budget=args.steps, trace=trace, decoder=args.decoder)
     code = 0
     try:
         res = m.run()
@@ -78,6 +79,8 @@ def main(argv=None) -> int:
     pr.add_argument("--animate", metavar="OUT.gif", help="animate executed path")
     pr.add_argument("--steps", type=int, default=DEFAULT_STEP_BUDGET,
                     help="step budget (default 1e6)")
+    pr.add_argument("--decoder", choices=sorted(DECODERS), default=None,
+                    help="override the program's decoder")
     pr.set_defaults(fn=cmd_run)
 
     pl = sub.add_parser("lint", help="validate a .vsr program")

@@ -18,13 +18,16 @@ def straightline() -> ProgramBuilder:
     return b
 
 
-def countdown(n: int = 5) -> ProgramBuilder:
+def countdown(n: int = 5, decoder: str = "cubic26") -> ProgramBuilder:
     """M2: prints n, n-1, ..., 1 via a literal cycle in the chain graph.
 
     R0 holds the unit decrement. The branch lists the exit edge first so the
     zero-accumulator tie rule routes execution out when A reaches (0,0,0).
+
+    `decoder` re-aims every segment at that decoder's cone centers, so the
+    same program authors cleanly under cubic26 or icosa32 (M6).
     """
-    b = ProgramBuilder("countdown")
+    b = ProgramBuilder("countdown", decoder=decoder)
     c = b.chain("entry")
     c.loadi(1).movr(0)          # R0 = unit decrement
     c.loadi(n)                  # A = counter
@@ -33,6 +36,28 @@ def countdown(n: int = 5) -> ProgramBuilder:
     c.branch(
         arm("HALT", 1.0, guard=(-1, 0, 0), to="end"),  # first: wins the A=0 tie
         arm("NOP", 1.0, guard=(1, 0, 0), to="loop"),   # A.x > 0: keep cycling
+    )
+    return b
+
+
+def countdown_b(n: int = 5) -> ProgramBuilder:
+    """A second countdown implementation for the M6 interpolation demo.
+
+    Same graph topology and guards as countdown(), same output, different
+    geometry: free magnitudes moved (register indices and OUT's float mode
+    survive because floor(n) and the n >= 2 threshold don't care), and the
+    loop-back filler is PUSHF instead of NOP — a different corner direction,
+    so interpolants sweep across cone boundaries on the way from A to B.
+    """
+    b = ProgramBuilder("countdown-b")
+    c = b.chain("entry")
+    c.loadi(1).op("MOVR", 0.9)          # R0 = unit decrement (idx still 0)
+    c.loadi(n)
+    c.label("loop")
+    c.op("OUT", 1.9).op("SUB", 0.75)    # still float mode, still R0
+    c.branch(
+        arm("HALT", 2.5, guard=(-1, 0, 0), to="end"),
+        arm("PUSHF", 1.0, guard=(1, 0, 0), to="loop"),  # harmless filler
     )
     return b
 
@@ -142,6 +167,7 @@ def helix(laps: int = 8) -> ProgramBuilder:
 ALL = {
     "straightline": straightline,
     "countdown": countdown,
+    "countdown_b": countdown_b,
     "add_two": add_two,
     "memory": memory,
     "hello": hello,

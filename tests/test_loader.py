@@ -88,7 +88,7 @@ def test_dead_zone_lint_warning():
         {"id": 0, "out": [{"seg": [0.351, 0.9364, 0.0], "to": 1}]},
         {"id": 1, "out": []},
     ])]))
-    assert any("dead zone" in w for w in p.warnings)
+    assert any("AmbiguousDirection" in w for w in p.warnings)
 
 
 def test_zero_length_segment_lint_warning():

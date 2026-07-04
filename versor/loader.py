@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .decode import Cubic26
+from .decode import DECODERS, get_decoder
 from .errors import LoadError, VersorFault
 
 VERSION = "0.1"
@@ -41,6 +41,7 @@ class Program:
     chains: list[Chain]  # index == chain id
     name: str = ""
     version: str = VERSION
+    decoder: str = "cubic26"
     warnings: list[str] = field(default_factory=list)
 
 
@@ -58,6 +59,9 @@ def from_dict(data: dict) -> Program:
         raise LoadError("program must be a JSON object")
     version = str(data.get("version", VERSION))
     name = str(data.get("name", ""))
+    decoder = str(data.get("decoder", "cubic26"))
+    if decoder not in DECODERS:
+        raise LoadError(f"unknown decoder {decoder!r}; available: {sorted(DECODERS)}")
     raw_chains = data.get("chains")
     if not isinstance(raw_chains, list) or not raw_chains:
         raise LoadError("program needs a non-empty 'chains' list")
@@ -123,14 +127,15 @@ def from_dict(data: dict) -> Program:
                     f"chain {ch.id} vertex {vid}: guard on single-edge vertex "
                     f"(ignored at runtime)")
 
-    prog = Program(chains=chains, name=name, version=version, warnings=warnings)
+    prog = Program(chains=chains, name=name, version=version, decoder=decoder,
+                   warnings=warnings)
     warnings.extend(lint(prog))
     return prog
 
 
 def lint(prog: Program) -> list[str]:
     """Decode every segment under the identity frame; warn on dead zones."""
-    dec = Cubic26()
+    dec = get_decoder(prog.decoder)
     warnings = []
     for ch in prog.chains:
         for vid, edges in ch.vertices.items():
@@ -144,7 +149,7 @@ def lint(prog: Program) -> list[str]:
                     dec.decode(e.seg / n)
                 except VersorFault as f:
                     warnings.append(
-                        f"{where}: dead zone under identity frame ({f.args[0]})")
+                        f"{where}: {f.kind} under identity frame ({f.message})")
     return warnings
 
 
@@ -152,6 +157,7 @@ def to_dict(prog: Program) -> dict:
     return {
         "version": prog.version,
         "name": prog.name,
+        "decoder": prog.decoder,
         "chains": [
             {
                 "id": ch.id,

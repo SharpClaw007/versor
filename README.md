@@ -15,7 +15,7 @@ its net displacement. This is the v0.1 reference implementation — interpreter,
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![NumPy](https://img.shields.io/badge/NumPy-2-013243?logo=numpy&logoColor=white)](https://numpy.org/)
 [![Matplotlib](https://img.shields.io/badge/Matplotlib-3-11557C)](https://matplotlib.org/)
-[![Tests](https://img.shields.io/badge/tests-69%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-84%20passing-brightgreen)](tests/)
 [![Spec](https://img.shields.io/badge/spec-v0.1-a855f7)](versor-design.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -42,8 +42,10 @@ by an accumulating twist. Full language definition in
 
 ## Features
 
-- **Vector ISA** — direction quantized against the frame picks one of 26 opcodes
-  (cubic-26: 6 face, 12 edge, 8 corner); magnitude is the immediate operand.
+- **Vector ISA** — direction quantized against the frame picks one of 26 opcodes;
+  magnitude is the immediate operand. Two pluggable decoders: `cubic26`
+  (component thresholds) and `icosa32` (nearest-neighbor over the 32 icosahedral
+  directions).
 - **Orientation frame** — a unit quaternion the program itself rotates with
   **ROTF/ROTG/ROTH**; non-commutativity of SO(3) is a feature, not a bug.
 - **Functions are shapes** — `CALL` executes a stored chain under the caller's
@@ -107,11 +109,12 @@ versor/
 ├── machine.py     # Machine state + step() + run()
 ├── loader.py      # .vsr JSON <-> chain graphs, validation, lint
 ├── builder.py     # Fluent authoring API with frame tracking
+├── interp.py      # M6: program-space lerp + interpolant classification
 ├── trace.py       # Per-step execution records
 ├── viz.py         # 3D renders + animation
 ├── cli.py         # python -m versor run | lint
 └── examples.py    # The milestone programs, one source of truth
-tests/             # 69 tests: quat, decode, ISA, loader, milestones
+tests/             # 84 tests: quat, decode, ISA, loader, milestones, M6
 examples/          # Generated .vsr files + renders + make_examples.py
 docs/              # Brand assets + README screenshots
 ```
@@ -131,8 +134,10 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 | `python -m versor run FILE.vsr`                | Run a program, print its OUT buffer      |
 | `python -m versor run FILE.vsr --trace out.png`| Also render the executed path            |
 | `python -m versor run FILE.vsr --animate out.gif` | Growing-path GIF animation            |
+| `python -m versor run FILE.vsr --decoder icosa32` | Override the program's decoder        |
 | `python -m versor lint FILE.vsr`               | Validate + dead-zone lint                |
 | `python examples/make_examples.py`             | Regenerate all example .vsr + renders    |
+| `python examples/interpolate.py`               | Regenerate the M6 interpolation study    |
 | `python -m pytest`                             | Run the test suite                       |
 
 Programs are authored with the builder (hand-writing raw vectors is possible but
@@ -194,6 +199,34 @@ print(Machine(b.build()).run().out)   # [5.0, 4.0, 3.0, 2.0, 1.0]
 
 </details>
 
+## M6 — the icosahedral dialect & program interpolation
+
+**`icosa32` decoder.** Icosahedral symmetry has orbit sizes 12/20/30, so a
+26-direction icosahedral set does not exist — the stretch goal as written is
+geometrically impossible. `icosa32` keeps the 26-opcode ISA over 32
+nearest-neighbor cones (12 icosahedron vertices + 20 face normals): the 8
+corner opcodes map *exactly* (`(±1,±1,±1)/√3` are dodecahedron vertices), the
+12 edge opcodes sit 13.3° from their icosa vertices, the 6 face opcodes take
+axis-heavy dodecahedron vertices 20.9° out, and the 6 leftover directions are
+reserved (`ReservedDirection` fault) for a future ISA extension. Programs
+authored on corner/edge cone centers run identically under both decoders;
+cubic face directions land on an exact icosa32 Voronoi tie and fault as
+ambiguous — the builder's `decoder=` parameter re-aims segments at the right
+cone centers, and `.vsr` files carry a `decoder` field.
+
+**Program interpolation.** Two extensionally-equal countdowns
+(`countdown.vsr`, `countdown_b.vsr`: same graph, same output, different
+segment geometry) define a straight line in program space; lerping every
+segment and running each interpolant maps what survives between them:
+
+<img src="docs/screenshots/interpolation.png" alt="Outcome strip along interpolation parameter t: green and amber equivalent spans separated by two red fault bands around t=0.25 and t=0.75" width="100%" />
+
+<sub><b>82.5% of the line still prints 5 4 3 2 1.</b> The red bands are
+decode dead zones where the lerped loop-filler segment crosses cone
+boundaries; in the wide amber middle it has left NOP's cone entirely and
+decodes as PROJ — a different program with identical behavior. Regenerate with
+<code>python examples/interpolate.py</code>.</sub>
+
 ## Milestones
 
 | Milestone | Deliverable                                            | Status |
@@ -204,10 +237,7 @@ print(Machine(b.build()).run().out)   # [5.0, 4.0, 3.0, 2.0, 1.0]
 | M3        | Functions, orientation-as-argument (`add_two.vsr`)     | ✅     |
 | M4        | Position-addressed memory (`memory.vsr`)               | ✅     |
 | M5        | Showpieces (`hello.vsr`, `fib.vsr`) + renders          | ✅     |
-| M6        | Icosahedral decoder, program interpolation (stretch)   | —      |
-
-The decoder is pluggable (`versor/decode.py`) so M6 slots in without touching
-the machine.
+| M6        | Icosahedral decoder + program interpolation (stretch)  | ✅     |
 
 ## License
 

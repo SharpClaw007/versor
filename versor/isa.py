@@ -220,7 +220,11 @@ OPCODES: dict[tuple[int, int, int], Op] = {
     (-1, -1, -1): Op("FAULT", "control", _fault),
 }
 
-# canonical unit direction for each mnemonic (for the builder)
+MNEMONIC_TO_TRIPLE: dict[str, tuple[int, int, int]] = {
+    op.mnemonic: triple for triple, op in OPCODES.items()
+}
+
+# canonical cubic26 unit direction for each mnemonic (for the builder)
 DIRECTIONS: dict[str, np.ndarray] = {
     op.mnemonic: np.array(triple, dtype=float) / np.linalg.norm(triple)
     for triple, op in OPCODES.items()

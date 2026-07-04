@@ -32,8 +32,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .decode import get_decoder
 from .errors import LoadError
-from .isa import DIRECTIONS
+from .isa import MNEMONIC_TO_TRIPLE
 from .loader import Program, from_dict
 from .quat import Quat
 
@@ -42,33 +43,41 @@ TWO_PI = 2.0 * math.pi
 
 @dataclass
 class Arm:
-    local_seg: np.ndarray
+    """One outgoing edge of a branch. Opcode intent is resolved against the
+    program's decoder direction table at branch() time, so `arm()` itself
+    stays decoder-agnostic."""
     guard: np.ndarray
     to: str | int | None
+    op: str | None = None
+    n: float = 0.0
+    local_seg: np.ndarray | None = None
 
 
 def arm(op: str, n: float, *, guard, to=None) -> Arm:
     """One outgoing edge of a branch: opcode intent + guard + target."""
+    if op not in MNEMONIC_TO_TRIPLE:
+        raise LoadError(f"unknown mnemonic {op!r}")
     g = np.asarray(guard, dtype=float)
     gn = float(np.linalg.norm(g))
     if gn < 1e-9:
         raise LoadError("arm: zero guard")
-    return Arm(local_seg=_op_vec(op, n), guard=g / gn, to=to)
+    return Arm(guard=g / gn, to=to, op=op, n=float(n))
 
 
 def arm_seg(local_seg, *, guard, to=None) -> Arm:
     """Branch arm from an explicit frame-local segment vector."""
     g = np.asarray(guard, dtype=float)
-    return Arm(local_seg=np.asarray(local_seg, dtype=float),
-               guard=g / float(np.linalg.norm(g)), to=to)
+    return Arm(guard=g / float(np.linalg.norm(g)), to=to,
+               local_seg=np.asarray(local_seg, dtype=float))
 
 
-def _op_vec(mnemonic: str, n: float) -> np.ndarray:
-    if mnemonic not in DIRECTIONS:
+def _op_vec(mnemonic: str, n: float,
+            dirs: dict[str, np.ndarray]) -> np.ndarray:
+    if mnemonic not in dirs:
         raise LoadError(f"unknown mnemonic {mnemonic!r}")
     if n <= 1e-9:
         raise LoadError(f"{mnemonic}: operand magnitude must be positive, got {n}")
-    return DIRECTIONS[mnemonic] * float(n)
+    return dirs[mnemonic] * float(n)
 
 
 def _reg_n(idx: int) -> float:
@@ -78,9 +87,11 @@ def _reg_n(idx: int) -> float:
 
 
 class ChainBuilder:
-    def __init__(self, cid: int, comment: str = ""):
+    def __init__(self, cid: int, comment: str = "",
+                 dirs: dict[str, np.ndarray] | None = None):
         self.id = cid
         self.comment = comment
+        self._dirs = dirs if dirs is not None else _mnemonic_dirs("cubic26")
         self._edges: dict[int, list[dict]] = {0: []}
         self._next_vid = 1
         self._cursor: int | None = 0
@@ -159,14 +170,16 @@ class ChainBuilder:
         return self
 
     def op(self, mnemonic: str, n: float, to=None) -> "ChainBuilder":
-        return self._emit(_op_vec(mnemonic, n), to)
+        return self._emit(_op_vec(mnemonic, n, self._dirs), to)
 
     def branch(self, *arms: Arm) -> "ChainBuilder":
         if len(arms) < 2:
             raise LoadError(f"chain {self.id}: branch needs 2+ arms")
         frm = self._require_cursor()
         for a in arms:
-            raw = self._Fa.rotate(a.local_seg)
+            local = (a.local_seg if a.local_seg is not None
+                     else _op_vec(a.op, a.n, self._dirs))
+            raw = self._Fa.rotate(local)
             edge = {"seg": [float(c) for c in raw],
                     "guard": [float(c) for c in a.guard], "to": -1}
             resolved = self._resolve(a.to)
@@ -238,18 +251,26 @@ class ChainBuilder:
         }
 
 
+def _mnemonic_dirs(decoder: str) -> dict[str, np.ndarray]:
+    """Cone-center authoring direction per mnemonic for the given decoder."""
+    by_triple = get_decoder(decoder).directions()
+    return {mn: by_triple[t] for mn, t in MNEMONIC_TO_TRIPLE.items()}
+
+
 class ProgramBuilder:
-    def __init__(self, name: str = ""):
+    def __init__(self, name: str = "", decoder: str = "cubic26"):
         self.name = name
+        self.decoder = decoder
+        self._dirs = _mnemonic_dirs(decoder)  # validates the decoder name
         self.chains: list[ChainBuilder] = []
 
     def chain(self, comment: str = "") -> ChainBuilder:
-        cb = ChainBuilder(len(self.chains), comment)
+        cb = ChainBuilder(len(self.chains), comment, self._dirs)
         self.chains.append(cb)
         return cb
 
     def to_dict(self) -> dict:
-        return {"version": "0.1", "name": self.name,
+        return {"version": "0.1", "name": self.name, "decoder": self.decoder,
                 "chains": [c._finish() for c in self.chains]}
 
     def build(self) -> Program:

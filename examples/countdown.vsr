@@ -1,6 +1,7 @@
 {
   "version": "0.1",
   "name": "countdown",
+  "decoder": "cubic26",
   "chains": [
     {
       "id": 0,

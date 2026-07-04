@@ -58,12 +58,12 @@ class RunResult:
 
 
 class Machine:
-    def __init__(self, program: Program, *, decoder: str = "cubic26",
+    def __init__(self, program: Program, *, decoder: str | None = None,
                  step_budget: int = DEFAULT_STEP_BUDGET,
                  max_call_depth: int = DEFAULT_MAX_CALL_DEPTH,
                  F0: Quat | None = None, P0=None, trace: Trace | None = None):
         self.program = program
-        self.decoder = get_decoder(decoder)
+        self.decoder = get_decoder(decoder or program.decoder)
         self.step_budget = step_budget
         self.max_call_depth = max_call_depth
         self.trace = trace
