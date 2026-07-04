@@ -198,15 +198,27 @@ $\varphi = \tfrac{1+\sqrt5}{2}$, $\varphi^2 = \varphi + 1$:
 - **Faces, 20.91°.** Using $\varphi^2 + \varphi^{-2} = 3$ (from
   $\varphi^2 = \varphi + 1$ and hence $\varphi^{-2} = (\varphi-1)^2 = 2 - \varphi$),
   the axis-heavy dodecahedron vertices such as
-  $(\varphi, 0, \varphi^{-1})$ have norm exactly $\sqrt3$, and
+  $(\varphi, \varphi^{-1}, 0)$ have norm exactly $\sqrt3$, and
   $\cos\theta = \varphi/\sqrt3 = 0.9342$ against $+\hat x$. Each axis has
-  *two* such candidates, $(\varphi, 0, \pm\varphi^{-1})$; one is assigned
+  *two* such candidates, $(\varphi, \pm\varphi^{-1}, 0)$; one is assigned
   (minor-component sign matching the major), its mirror is reserved.
+
+A caution that cost this project a bug: the 20 dodecahedral directions must
+be the face normals *of the icosahedron orientation actually used* — the
+cyclic family $(0, \varphi, \varphi^{-1})$, since e.g. the face
+$\{(1,\varphi,0), (-1,\varphi,0), (0,1,\varphi)\}$ has centroid
+$\propto (0, \varphi^2, 1) = \varphi\,(0, \varphi, \varphi^{-1})$. The
+mirrored standard family $(0, \varphi^{-1}, \varphi)$ is the dual of a
+*rotated* icosahedron; mixing the two orientations produces near-coincident
+direction pairs and silently collapses the set's minimum pairwise
+separation from 37.38° to 10.81°
+(`test_m6.py::test_direction_set_is_a_true_dual_pair` pins the correct
+geometry).
 
 > **Proposition 4.** The six cubic face directions lie on exact Voronoi
 > boundaries of `icosa32` and are therefore ambiguous under it.
 >
-> *Proof.* $\hat x \cdot (\varphi,0,\pm\varphi^{-1})/\sqrt3 = \varphi/\sqrt3$
+> *Proof.* $\hat x \cdot (\varphi,\pm\varphi^{-1},0)/\sqrt3 = \varphi/\sqrt3$
 > for both signs: an exact two-way tie, i.e. a boundary point of the
 > partition, inside any positive dead margin. ∎
 
@@ -216,10 +228,14 @@ programs are portable (pinned by
 face-authored ones must be re-aimed — which the builder does automatically
 from the decoder's `directions` section. The ambiguity rule is a relative
 margin on cosine similarity: fault when the best and second-best dot
-products are within 0.01, roughly a 2° shell around each Voronoi wall given
-that the closest pair of the 32 directions is 10.81° apart. Measured
-partition: 69.7 % assigned, 16.0 % reserved, 14.3 % dead — half the
-forbidden area of cubic-26, at the cost of six unusable cones.
+products are within 0.01. Near a wall between directions separated by
+$\theta$ the gap grows at rate $2\sin(\theta/2)$ per radian of motion, so
+with the set's minimum separation of 37.38° (the uniform
+vertex-to-adjacent-face angle,
+$\arccos(\varphi^2 / (\sqrt3\sqrt{1+\varphi^2}))$) the fault shell is about
+0.9° on each side of every wall. Measured partition: 73.6 % assigned,
+17.7 % reserved, 8.8 % dead — less than a third of cubic-26's forbidden
+area, at the cost of six unusable cones.
 
 ## 4. Semantics: the step map and frame covariance
 

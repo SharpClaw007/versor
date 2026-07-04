@@ -15,8 +15,8 @@ a cone and leaving 6 directions reserved (decoding into one is a
 - the 12 edge triples map to the icosahedron vertex with the same sign
   pattern (φ in place of one 1), 13.3° away;
 - the 6 face triples map to the axis-heavy dodecahedron vertex with matching
-  signs (e.g. +x -> (φ, 0, 1/φ)/√3), 20.9° away — its mirror twin
-  (φ, 0, -1/φ) is one of the 6 reserved directions.
+  signs (e.g. +x -> (φ, 1/φ, 0)/√3), 20.9° away — its mirror twin
+  (φ, -1/φ, 0) is one of the 6 reserved directions.
 
 Consequences: programs authored on corner/edge cone centers decode the same
 under both decoders; cubic face directions sit on an exact Voronoi tie under
@@ -104,13 +104,19 @@ def _icosa_assignment() -> list[tuple[np.ndarray, tuple[int, int, int] | None]]:
 
     # 12 axis-heavy dodecahedron vertices: 6 carry the face opcodes
     # (minor-component sign matches the major one), 6 are reserved.
+    # These are cyclic permutations of (phi, 1/phi, 0) — the TRUE dual of the
+    # icosahedron orientation above (each is the centroid of three mutually
+    # adjacent icosahedron vertices). The mirrored family (phi, 0, 1/phi)
+    # belongs to a rotated dodecahedron; using it mixes two incompatible
+    # polyhedron orientations and collapses the minimum pairwise separation
+    # of the 32 directions from 37.38 to 10.81 degrees.
     for s in (-1, 1):
-        entries.append((np.array([s * PHI, 0, s / PHI]), (s, 0, 0)))
-        entries.append((np.array([s / PHI, s * PHI, 0]), (0, s, 0)))
-        entries.append((np.array([0, s / PHI, s * PHI]), (0, 0, s)))
-        entries.append((np.array([s * PHI, 0, -s / PHI]), None))
-        entries.append((np.array([-s / PHI, s * PHI, 0]), None))
-        entries.append((np.array([0, s / PHI, -s * PHI]), None))
+        entries.append((np.array([s * PHI, s / PHI, 0]), (s, 0, 0)))
+        entries.append((np.array([0, s * PHI, s / PHI]), (0, s, 0)))
+        entries.append((np.array([s / PHI, 0, s * PHI]), (0, 0, s)))
+        entries.append((np.array([s * PHI, -s / PHI, 0]), None))
+        entries.append((np.array([0, s * PHI, -s / PHI]), None))
+        entries.append((np.array([-s / PHI, 0, s * PHI]), None))
 
     return [(v / np.linalg.norm(v), triple) for v, triple in entries]
 

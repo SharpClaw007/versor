@@ -50,10 +50,21 @@ class TestIcosa32:
 
     def test_reserved_directions_fault(self):
         icosa = Icosa32()
-        for v in [(PHI, 0, -1 / PHI), (-1 / PHI, PHI, 0), (0, 1 / PHI, -PHI)]:
+        for v in [(PHI, -1 / PHI, 0), (0, PHI, -1 / PHI), (-1 / PHI, 0, PHI)]:
             with pytest.raises(VersorFault) as e:
                 icosa.decode(unit(v))
             assert e.value.kind == "ReservedDirection"
+
+    def test_direction_set_is_a_true_dual_pair(self):
+        # regression for the mixed-orientation bug: the 20 dodecahedral
+        # directions must be the face normals of the 12-vertex icosahedron
+        # actually used, giving minimum pairwise separation 37.38 degrees
+        # (the mismatched mirror family collapses it to 10.81)
+        m = Icosa32()._matrix
+        dots = np.clip(m @ m.T, -1, 1)
+        np.fill_diagonal(dots, -1)
+        min_angle = math.degrees(math.acos(float(dots.max())))
+        assert min_angle > 37.0
 
     def test_registry(self):
         assert get_decoder("icosa32").name == "icosa32"
