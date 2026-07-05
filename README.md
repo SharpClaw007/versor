@@ -187,11 +187,23 @@ tooling/           # .vasm TextMate grammar
 
 | Requirement | Version | Notes                        |
 |-------------|---------|------------------------------|
-| Python      | 3.11+   | 3.14 tested                  |
+| Python      | 3.11+   | CI: Linux 3.11/3.14, macOS + Windows 3.12 |
 
 ```bash
+# from a clone (dev):
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+# or grab the wheel from the latest GitHub release:
+pip install 'versor-0.4.0-py3-none-any.whl[lsp]'   # puts `versor` on PATH
 ```
+
+**Editor support:** install `versor-0.4.0.vsix` from the
+[release](https://github.com/SharpClaw007/versor/releases) into VS Code
+(`code --install-extension versor-*.vsix`) for `.vasm`/`.vhl` highlighting
+plus LSP diagnostics, hover docs, go-to-definition, and completion — the
+extension launches `versor lsp` from your PATH. Any LSP-capable editor can
+run `versor lsp` directly. There's also `versor repl` for line-at-a-time
+experimentation with a live machine (`:state`, `:mem`, `:trace out.png`).
+The one-page language manual is [`docs/reference.md`](docs/reference.md).
 
 | Command                                        | Description                              |
 |------------------------------------------------|------------------------------------------|
@@ -204,6 +216,8 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 | `python -m versor vhl FILE.vhl [-o out.vsr]`   | Compile VHL to `.vsr` (run also takes `.vhl`) |
 | `python -m versor export FILE --gcode/--obj/--stl` | Toolpath / mesh export of a run      |
 | `python -m versor lint FILE.vsr`               | Validate + dead-zone lint                |
+| `python -m versor repl`                        | Interactive machine, one instruction at a time |
+| `python -m versor lsp`                         | Language server (stdio) for editors      |
 | `python examples/make_examples.py`             | Regenerate all example .vsr + renders    |
 | `python examples/interpolate.py`               | Regenerate the interpolation study       |
 | `python examples/synthesize.py`                | Regenerate robustness + evolution plots  |

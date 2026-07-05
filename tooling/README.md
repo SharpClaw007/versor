@@ -1,6 +1,7 @@
 # Tooling
 
-- `vasm.tmLanguage.json` — TextMate grammar for `.vasm` syntax highlighting.
-  VS Code: drop into an extension's `syntaxes/` with a `contributes.grammars`
-  entry, or use any editor that consumes TextMate grammars (Sublime, Zed,
-  `bat`, GitHub Linguist submissions).
+- `vscode-versor/` — the VS Code extension: `.vasm`/`.vhl` grammars +
+  LSP client (`npm install && npm run package` → `.vsix`; prebuilt one on
+  the GitHub release page).
+- `vasm.tmLanguage.json` — standalone TextMate grammar for `.vasm`, for any
+  editor that consumes them (Sublime, Zed, `bat`, GitHub Linguist).
