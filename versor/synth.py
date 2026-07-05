@@ -130,7 +130,7 @@ def segment_tolerances(prog: Program, *, directions: int = 12,
     return result
 
 
-def output_fitness(target: list, tol: float = 1e-6):
+def output_fitness(target: list, tol: float = 1e-4):
     """Fitness (lower = better, 0 = match within tol): distance between OUT
     buffers, with penalties for faults, non-halting, and length mismatch."""
 
@@ -182,6 +182,6 @@ def evolve(topology: Program, fitness, *, sigma: float = 0.3,
             if stall >= 50:  # value-polish shrank sigma; structural jumps
                 sigma = 0.25  # need exploration again
                 stall = 0
-        sigma = float(np.clip(sigma, 1e-3, 2.0))
+        sigma = float(np.clip(sigma, 1e-7, 2.0))
         history.append(best)
     return set_vectors(topology, x), history

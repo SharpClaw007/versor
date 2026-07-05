@@ -425,6 +425,33 @@ that happen to compute the same function — the germ of the spec's open
 question 5, where extensional equivalence classes would be studied as
 unions of cells and homotopy classes of paths between them.
 
+### 8.1 Robustness maps and evolutionary search
+
+`versor/synth.py` operationalizes the cell picture. **Per-segment
+tolerance** — the largest perturbation radius of one segment that preserves
+output in every sampled direction — empirically measures the distance to
+the nearest behavior wall, and on `countdown` it cleanly separates two
+kinds of geometry: *structure-carrying* segments (branch arms, OUT, the
+register-indexed ops) tolerate 0.15–0.31 before anything changes, while
+*value-carrying* segments (the LOADI whose magnitudes are the output
+values) have tolerance zero — the magnitude channel is continuous, so its
+exact-output cells are measure-zero slices. A Versor program is thus a
+mixed discrete/continuous object, and the tolerance map is its local
+decomposition.
+
+The same structure supports **synthesis by continuous search**: a
+(1+λ) evolution strategy over all segment vectors with a behavioral
+fitness (output distance, shaped so that producing more of the target
+sequence always dominates value error, with fault and non-halting
+penalties) repairs a countdown whose every segment was scrambled by
+Gaussian noise — from wrong output back to printing 3 2 1 *exactly* (to
+the 10⁻⁴ behavioral tolerance) in 75 generations of 16 children
+(`examples/synthesize.py`). Discrete cell hops and continuous value polish
+alternate: sigma adapts by a 1/5-style rule and re-expands on stall,
+because value polish shrinks the mutation scale below what a cell hop
+needs. Program space being ℝ^{3m} is what makes this trivially available —
+no AST mutation operators, no grammar; just noise on geometry.
+
 ## 9. Computability sketch
 
 Two-counter Minsky machines are Turing complete, and Versor hosts them
