@@ -84,6 +84,8 @@ class Machine:
         self.skip = False
         self.halted = False
         self.halt_reason = ""
+        self._exec_depth = 0
+        self._pending_trace: list = []  # records from EXEC'd instructions
 
     # --- helpers used by opcode handlers ---
 
@@ -98,6 +100,45 @@ class Machine:
         self.halt(f"fault: {kind}")
         raise VersorFault(kind, message, step=self.steps, chain=self.chain,
                           vertex=self.vertex)
+
+    def do_exec(self) -> None:
+        """EXEC (LOAD with n >= 2): execute the arrival cell's stored vector
+        as a full instruction — decoded under the live frame, including its
+        movement — without advancing the chain position. Chained EXECs walk
+        code laid down in memory."""
+        from .isa import OPCODES as _OPS  # local import avoids a cycle
+        w = self.M.get(self.cell(), np.zeros(3)).copy()
+        n = float(np.linalg.norm(w))
+        if n < EPS:
+            self.fault("ExecEmptyCell",
+                       f"EXEC at empty cell {self.cell()}")
+        self._exec_depth += 1
+        try:
+            if self._exec_depth > 64:
+                self.fault("ExecDepthExceeded", "EXEC depth of 64 exceeded")
+            if self.steps >= self.step_budget:
+                self.fault("StepBudgetExhausted",
+                           f"budget of {self.step_budget} steps")
+            v_local = self.F.conj().rotate(w)
+            try:
+                triple = self.decoder.decode(v_local / n)
+            except VersorFault as f:
+                self.fault(f.kind, f.message)
+            op = _OPS[triple]
+            p0 = self.P.copy()
+            self.P = self.P + w
+            self.steps += 1
+            step_no = self.steps
+            slot = len(self._pending_trace)  # deeper EXECs append after us;
+            op.handler(self, n)              # insert here to stay chronological
+            if self.trace is not None:
+                self._pending_trace.insert(slot, dict(
+                    step=step_no, chain=self.chain, frm=self.vertex,
+                    to=self.vertex, P0=p0, P1=p0 + w, F=self.F.as_tuple(),
+                    opcode="@" + op.mnemonic, klass=op.klass, n=n,
+                    A=self.A.copy(), out_len=len(self.OUT)))
+        finally:
+            self._exec_depth -= 1
 
     def do_ret(self) -> None:
         """Shared by the RET opcode and implicit RET at chain end."""
@@ -161,6 +202,8 @@ class Machine:
         self.P = self.P + v_raw          # move ...
         self.vertex = edge.to
         skipped = self.skip
+        self.steps += 1
+        step_no = self.steps
         if skipped:
             self.skip = False
         else:
@@ -172,14 +215,16 @@ class Machine:
                     raise VersorFault(f.kind, f.message, step=self.steps,
                                       chain=self.chain, vertex=self.vertex) from None
                 raise
-        self.steps += 1
 
         if self.trace is not None:
             self.trace.record(
-                step=self.steps, chain=self.chain, frm=frm, to=self.vertex,
+                step=step_no, chain=self.chain, frm=frm, to=self.vertex,
                 P0=p0, P1=p0 + v_raw, F=self.F.as_tuple(), opcode=op.mnemonic,
                 klass=op.klass, n=n, A=self.A.copy(), skipped=skipped,
                 branch=is_branch, out_len=len(self.OUT))
+            for rec in self._pending_trace:  # EXEC'd instructions, in order
+                self.trace.record(**rec)
+        self._pending_trace.clear()
 
     def run(self) -> RunResult:
         while not self.halted:

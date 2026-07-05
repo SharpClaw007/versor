@@ -1,7 +1,7 @@
 # Design: the three deferred extensions
 
-> Status: **planned, not implemented.** Targets spec open questions Q2 and
-> Q4 plus the reserved icosa32 cones. Ordering: EXEC (v0.3a) → Sim(3)
+> Status: **EXEC (§2) implemented in v0.3a.** Q2 and the extended ISA
+> remain as planned below. Ordering: EXEC (v0.3a) → Sim(3)
 > scale (v0.3b) → extended ISA "Versor-32" (v0.4). Each lands with a spec
 > addendum here (the original `versor-design.md` stays as written), a
 > whitepaper section, JS-port parity + golden regeneration, and README

@@ -196,6 +196,12 @@ class ChainBuilder:
     def loadi(self, n: float):  return self.op("LOADI", n)
     def store(self, n: float = 1.0):  return self.op("STORE", n)
     def load(self, n: float = 1.0):  return self.op("LOAD", n)
+
+    def exec_cell(self, n: float = 2.0):
+        """EXEC: LOAD with n >= 2 executes the arrival cell's vector."""
+        if n < 2.0:
+            raise LoadError(f"exec_cell: magnitude must be >= 2, got {n}")
+        return self.op("LOAD", n)
     def movr(self, idx: int):  return self.op("MOVR", _reg_n(idx))
     def mova(self, idx: int):  return self.op("MOVA", _reg_n(idx))
     def halt(self, n: float = 1.0):  return self.op("HALT", n)

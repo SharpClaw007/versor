@@ -51,6 +51,12 @@ def main():
         compile_minsky([DecJz(2, next=1, zero=2), Inc(1, next=0)],
                        c1=3, c2=4, emit_counters=True).build()))
 
+    from versor import ProgramBuilder
+    b = ProgramBuilder("exec-trampoline")
+    c = b.chain()
+    c.loadi(9).store(0.5).op("MOVR", 2.0).exec_cell(2.5).out().halt()
+    entries.append(record("exec-trampoline", b.build()))
+
     for vasm_name in ("countdown", "add_two"):
         path = os.path.join(EXAMPLES, f"{vasm_name}.vasm")
         with open(path) as f:

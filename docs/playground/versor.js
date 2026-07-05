@@ -189,7 +189,10 @@ function op(triple, mnemonic, klass, handler) {
 
 op([1, 0, 0], "LOADI", "data", (m, n) => setLocalX(m, n));
 op([-1, 0, 0], "STORE", "data", (m) => { m.M.set(m.cellKey(), m.A.slice()); });
-op([0, 1, 0], "LOAD", "data", (m) => { m.A = (m.M.get(m.cellKey()) || [0, 0, 0]).slice(); });
+op([0, 1, 0], "LOAD", "data", (m, n) => {
+  if (n >= 2.0 - 1e-9) m.doExec();  // EXEC (v0.3a)
+  else m.A = (m.M.get(m.cellKey()) || [0, 0, 0]).slice();
+});
 op([0, -1, 0], "MOVR", "data", (m, n) => { m.R[regIndex(n)] = m.A.slice(); });
 op([0, 0, 1], "MOVA", "data", (m, n) => { m.A = m.R[regIndex(n)].slice(); });
 op([0, 0, -1], "HALT", "control", (m) => m.halt("HALT"));
@@ -273,6 +276,8 @@ export class Machine {
     this.halted = false;
     this.haltReason = "";
     this.trace = opts.trace ? [] : null;
+    this.execDepth = 0;
+    this.pendingTrace = [];
   }
 
   cellKey() {
@@ -285,6 +290,45 @@ export class Machine {
     this.halt(`fault: ${kind}`);
     throw new VersorFault(kind, message,
       { step: this.steps, chain: this.chain, vertex: this.vertex });
+  }
+
+  doExec() {
+    const w = (this.M.get(this.cellKey()) || [0, 0, 0]).slice();
+    const n = vnorm(w);
+    if (n < EPS) this.fault("ExecEmptyCell", `EXEC at empty cell ${this.cellKey()}`);
+    this.execDepth += 1;
+    try {
+      if (this.execDepth > 64) this.fault("ExecDepthExceeded", "EXEC depth of 64 exceeded");
+      if (this.steps >= this.stepBudget) {
+        this.fault("StepBudgetExhausted", `budget of ${this.stepBudget} steps`);
+      }
+      const vlocal = qrot(qconj(this.F), w);
+      let triple;
+      try {
+        triple = this.decoder.decode(vscale(vlocal, 1 / n));
+      } catch (f) {
+        if (f instanceof VersorFault) this.fault(f.kind, f.shortMessage);
+        throw f;
+      }
+      const o = OPCODES.get(key(triple));
+      const p0 = this.P.slice();
+      this.P = vadd(this.P, w);
+      this.steps += 1;
+      const stepNo = this.steps;
+      const slot = this.pendingTrace.length;
+      o.handler(this, n);
+      if (this.trace) {
+        this.pendingTrace.splice(slot, 0, {
+          step: stepNo, chain: this.chain, frm: this.vertex, to: this.vertex,
+          P0: p0, P1: vadd(p0, w), F: this.F.slice(),
+          opcode: "@" + o.mnemonic, klass: o.klass, n,
+          A: this.A.slice(), skipped: false, branch: false,
+          outLen: this.OUT.length,
+        });
+      }
+    } finally {
+      this.execDepth -= 1;
+    }
   }
 
   doRet() {
@@ -347,6 +391,8 @@ export class Machine {
     this.P = vadd(this.P, vraw);
     this.vertex = edge.to;
     const skipped = this.skip;
+    this.steps += 1;
+    const stepNo = this.steps;
     if (skipped) {
       this.skip = false;
     } else {
@@ -363,15 +409,16 @@ export class Machine {
         throw f;
       }
     }
-    this.steps += 1;
     if (this.trace) {
       this.trace.push({
-        step: this.steps, chain: this.chain, frm, to: this.vertex,
+        step: stepNo, chain: this.chain, frm, to: this.vertex,
         P0: p0, P1: vadd(p0, vraw), F: this.F.slice(), opcode: o.mnemonic,
         klass: o.klass, n, A: this.A.slice(), skipped, branch: isBranch,
         outLen: this.OUT.length,
       });
+      for (const rec of this.pendingTrace) this.trace.push(rec);
     }
+    this.pendingTrace.length = 0;
   }
 
   run() {

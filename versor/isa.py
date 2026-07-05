@@ -56,7 +56,10 @@ def _store(m, n):
 
 
 def _load(m, n):
-    m.A = m.M.get(m.cell(), np.zeros(3)).copy()
+    if n >= 2.0 - 1e-9:  # EXEC: run the cell's stored vector (v0.3a)
+        m.do_exec()
+    else:
+        m.A = m.M.get(m.cell(), np.zeros(3)).copy()
 
 
 def _movr(m, n):

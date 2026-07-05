@@ -28,7 +28,8 @@ Details:
 - Angles for ROTF/ROTG/ROTH: a float or [k]pi[/m] (pi, pi/2, 3pi/4, 2pi/24).
 - No-operand mnemonics (HALT, NOP, RET, JMPZ, JMPP, PUSHF, POPF, NORM, STORE,
   LOAD, OUT, FAULT) default to magnitude 1.0; OUTC is OUT with n = 2 (char
-  mode). Any of them accepts an explicit magnitude.
+  mode); EXEC is LOAD with n >= 2 (execute the arrival cell's stored vector).
+  Any of them accepts an explicit magnitude.
 - SEG (x,y,z) emits an explicit frame-local segment; SEGRAW bypasses the
   authoring frame.
 - Any instruction may end with '-> label' to target an existing or future
@@ -56,7 +57,8 @@ FLOAT_OPS = {"LOADI", "SCALE"}
 ANGLE_OPS = {"ROTF", "ROTG", "ROTH"}
 DEFAULT_N = {"HALT": 1.0, "NOP": 1.0, "RET": 1.0, "JMPZ": 1.0, "JMPP": 1.0,
              "PUSHF": 1.0, "POPF": 1.0, "NORM": 1.0, "STORE": 1.0,
-             "LOAD": 1.0, "FAULT": 1.0, "OUT": 1.0, "OUTC": 2.0}
+             "LOAD": 1.0, "FAULT": 1.0, "OUT": 1.0, "OUTC": 2.0, "EXEC": 2.0}
+PSEUDO = {"OUTC": "OUT", "EXEC": "LOAD"}  # magnitude-band aliases
 
 _LABEL_RE = re.compile(r"^([A-Za-z_]\w*):\s*(.*)$")
 _REG_RE = re.compile(r"^[rR]([0-3])$")
@@ -163,7 +165,11 @@ def _operand(mnemonic: str, args: str, ln: int,
             raise _err(ln, f"CALL: chain {cid} out of range (0..{n_chains - 1})")
         return cid + 0.5
     if mnemonic in DEFAULT_N:
-        return _parse_num(args, ln, mnemonic) if args else DEFAULT_N[mnemonic]
+        n = _parse_num(args, ln, mnemonic) if args else DEFAULT_N[mnemonic]
+        if mnemonic == "EXEC" and n < 2.0:
+            raise _err(ln, f"EXEC magnitude must be >= 2 (got {n}); "
+                           "below 2 it is a plain LOAD")
+        return n
     raise _err(ln, f"unknown mnemonic {mnemonic!r}")
 
 
@@ -263,7 +269,7 @@ def assemble(text: str) -> ProgramBuilder:
                 continue
 
             n = _operand(mnemonic, args, ln, chain_ids, n_chains)
-            real = "OUT" if mnemonic == "OUTC" else mnemonic
+            real = PSEUDO.get(mnemonic, mnemonic)
             if real in ANGLE_OPS:
                 # route through the rot helpers so the authoring frame updates
                 getattr(c, real.lower())(n)
@@ -296,7 +302,7 @@ def _parse_arms(args: str, ln: int, chain_ids: dict[str, int],
         mnemonic = op_parts[0].upper()
         op_args = op_parts[1] if len(op_parts) > 1 else ""
         n = _operand(mnemonic, op_args, ln, chain_ids, n_chains)
-        real = "OUT" if mnemonic == "OUTC" else mnemonic
+        real = PSEUDO.get(mnemonic, mnemonic)
         try:
             arms.append(arm(real, n, guard=guard, to=target.strip()))
         except LoadError as e:

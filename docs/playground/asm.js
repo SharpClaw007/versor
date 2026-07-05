@@ -18,8 +18,9 @@ const ANGLE_OPS = new Set(["ROTF", "ROTG", "ROTH"]);
 const ROT_AXES = { ROTF: [1, 0, 0], ROTG: [0, 1, 0], ROTH: [0, 0, 1] };
 const DEFAULT_N = {
   HALT: 1, NOP: 1, RET: 1, JMPZ: 1, JMPP: 1, PUSHF: 1, POPF: 1,
-  NORM: 1, STORE: 1, LOAD: 1, FAULT: 1, OUT: 1, OUTC: 2,
+  NORM: 1, STORE: 1, LOAD: 1, FAULT: 1, OUT: 1, OUTC: 2, EXEC: 2,
 };
+const PSEUDO = { OUTC: "OUT", EXEC: "LOAD" };
 const LABEL_RE = /^([A-Za-z_]\w*):\s*(.*)$/;
 const REG_RE = /^[rR]([0-3])$/;
 const PI_RE = /^(\d+\.?\d*)?\s*\*?\s*pi\s*(?:\/\s*(\d+\.?\d*))?$/i;
@@ -101,7 +102,13 @@ function operand(mnemonic, args, ln, chainIds, nChains) {
     if (cid < 0 || cid >= nChains) throw err(ln, `CALL: chain ${cid} out of range (0..${nChains - 1})`);
     return cid + 0.5;
   }
-  if (mnemonic in DEFAULT_N) return args ? parseNum(args, ln, mnemonic) : DEFAULT_N[mnemonic];
+  if (mnemonic in DEFAULT_N) {
+    const n = args ? parseNum(args, ln, mnemonic) : DEFAULT_N[mnemonic];
+    if (mnemonic === "EXEC" && n < 2.0) {
+      throw err(ln, `EXEC magnitude must be >= 2 (got ${n}); below 2 it is a plain LOAD`);
+    }
+    return n;
+  }
   throw err(ln, `unknown mnemonic '${mnemonic}'`);
 }
 
@@ -266,7 +273,7 @@ export function assemble(text) {
         const opParts = left.slice(ci + 1).trim().split(/\s+/);
         const mn = opParts[0].toUpperCase();
         const n = operand(mn, opParts.slice(1).join(" "), ln, chainIds, nChains);
-        const real = mn === "OUTC" ? "OUT" : mn;
+        const real = PSEUDO[mn] || mn;
         return { localSeg: c.opVec(real, n, ln), guard: g, to: target };
       });
       if (arms.length < 2) throw err(ln, "branch needs 2+ arms");
@@ -294,7 +301,7 @@ export function assemble(text) {
     }
 
     const n = operand(mnemonic, args, ln, chainIds, nChains);
-    const real = mnemonic === "OUTC" ? "OUT" : mnemonic;
+    const real = PSEUDO[mnemonic] || mnemonic;
     if (ANGLE_OPS.has(real)) {
       if (to !== null) throw err(ln, `${real}: '->' jump not supported on rotations`);
       c.rot(real, n, ln);
