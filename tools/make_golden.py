@@ -57,6 +57,18 @@ def main():
     c.loadi(9).store(0.5).op("MOVR", 2.0).exec_cell(2.5).out().halt()
     entries.append(record("exec-trampoline", b.build()))
 
+    scaled_src = """
+.chain main
+        CALL fn 0.6
+        OUT
+        HALT
+.chain fn
+        NOP 4
+"""
+    from versor.asm import assemble as _assemble
+    entries.append(record("vasm-scaled-call", _assemble(scaled_src).build(),
+                          vasm=scaled_src))
+
     for vasm_name in ("countdown", "add_two"):
         path = os.path.join(EXAMPLES, f"{vasm_name}.vasm")
         with open(path) as f:

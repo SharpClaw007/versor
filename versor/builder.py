@@ -231,7 +231,20 @@ class ChainBuilder:
     def out(self):  return self.op("OUT", 1.0)
     def outc(self):  return self.op("OUT", 2.0)
 
-    def call(self, cid: int):  return self.op("CALL", cid + 0.5)
+    def call(self, cid: int, scale: float = 1.0):
+        """CALL chain `cid`; `scale` multiplies the callee's Sim(3) scale,
+        encoded in the fractional magnitude as 2^(2*frac - 1). One call can
+        carry a factor in (0.5, 2); compose calls for more."""
+        if scale == 1.0:
+            frac = 0.5
+        else:
+            frac = 0.5 + math.log2(scale) / 2.0
+            if not -1e-9 <= frac < 1.0 - 1e-6:
+                raise LoadError(
+                    f"call: scale {scale} outside a single call's range "
+                    "[0.5, 2) — compose nested calls for larger factors")
+            frac = max(frac, 0.0)
+        return self.op("CALL", cid + frac)
     def ret(self, n: float = 1.0):  return self.op("RET", n)
     def jmpz(self, n: float = 1.0):  return self.op("JMPZ", n)
     def jmpp(self, n: float = 1.0):  return self.op("JMPP", n)

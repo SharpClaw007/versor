@@ -164,6 +164,32 @@ def helix(laps: int = 8) -> ProgramBuilder:
     return b
 
 
+def zoom(depth: int = 8) -> ProgramBuilder:
+    """Sim(3) showpiece (v0.3b): telescoping recursion by pure scale.
+
+    Each level draws the same two-segment motif and calls the next level at
+    0.55 scale; RET restores the caller's scale, so the trace is the motif
+    at 0.55^k for k = 0..depth-1 — geometric self-similarity from the call
+    stack alone.
+
+    No frame rotations, deliberately: a callee's raw vectors decode under
+    the caller's live frame, so a chain only behaves identically across
+    call sites that share an orientation. Fractals with turns (Koch, Lévy)
+    need orientation-specialized chain clones — see the whitepaper's
+    Sim(3) notes.
+    """
+    b = ProgramBuilder("zoom")
+    b.chain("entry").call(1).halt()
+    for k in range(1, depth + 1):
+        c = b.chain(f"level {k}")
+        c.nop(2.0)
+        c.op("MOVR", 2.0)          # walk -y (R2 write is harmless)
+        if k < depth:
+            c.call(k + 1, scale=0.55)
+        c.nop(2.0)
+    return b
+
+
 ALL = {
     "straightline": straightline,
     "countdown": countdown,
@@ -173,6 +199,7 @@ ALL = {
     "hello": hello,
     "fib": fib,
     "helix": helix,
+    "zoom": zoom,
 }
 
 

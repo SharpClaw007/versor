@@ -234,17 +234,21 @@ op([1, 1, 1], "CALL", "control", (m, n) => {
   if (m.CS.length >= m.maxCallDepth) {
     throw new VersorFault("CallStackOverflow", `call depth ${m.maxCallDepth} exceeded`);
   }
-  m.CS.push([m.chain, m.vertex, m.F, m.P.slice()]);
+  m.CS.push([m.chain, m.vertex, m.F, m.P.slice(), m.S]);
+  const frac = n - Math.floor(n);  // Sim(3) scale argument (v0.3b)
+  m.setScale(m.S * 2.0 ** (2.0 * frac - 1.0));
   m.chain = cid;
   m.vertex = 0;
 });
 op([1, 1, -1], "RET", "control", (m) => m.doRet());
 op([1, -1, 1], "JMPZ", "control", (m) => { if (vnorm(m.A) < EPS) m.skip = true; });
 op([1, -1, -1], "JMPP", "control", (m) => { if (localX(m) > EPS) m.skip = true; });
-op([-1, 1, 1], "PUSHF", "frame", (m) => { m.AUX.push([m.F, m.P.slice()]); });
+op([-1, 1, 1], "PUSHF", "frame", (m) => { m.AUX.push([m.F, m.P.slice(), m.S]); });
 op([-1, 1, -1], "POPF", "frame", (m) => {
   if (!m.AUX.length) throw new VersorFault("StackUnderflow", "POPF on empty aux stack");
-  m.F = m.AUX.pop()[0];
+  const [f, , s] = m.AUX.pop();
+  m.F = f;
+  m.S = s;
 });
 op([-1, -1, 1], "NOP", "control", () => {});
 op([-1, -1, -1], "FAULT", "control", (m, n) => {
@@ -263,6 +267,7 @@ export class Machine {
     this.maxCallDepth = opts.maxCallDepth ?? 1024;
     this.P = [0, 0, 0];
     this.F = opts.F0 ? opts.F0.slice() : QID.slice();
+    this.S = opts.S0 ?? 1.0;
     this.A = [0, 0, 0];
     this.R = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
     this.M = new Map();
@@ -312,7 +317,8 @@ export class Machine {
       }
       const o = OPCODES.get(key(triple));
       const p0 = this.P.slice();
-      this.P = vadd(this.P, w);
+      const moved = vscale(w, this.S);
+      this.P = vadd(this.P, moved);
       this.steps += 1;
       const stepNo = this.steps;
       const slot = this.pendingTrace.length;
@@ -320,10 +326,10 @@ export class Machine {
       if (this.trace) {
         this.pendingTrace.splice(slot, 0, {
           step: stepNo, chain: this.chain, frm: this.vertex, to: this.vertex,
-          P0: p0, P1: vadd(p0, w), F: this.F.slice(),
+          P0: p0, P1: vadd(p0, moved), F: this.F.slice(),
           opcode: "@" + o.mnemonic, klass: o.klass, n,
           A: this.A.slice(), skipped: false, branch: false,
-          outLen: this.OUT.length,
+          outLen: this.OUT.length, s: this.S,
         });
       }
     } finally {
@@ -333,11 +339,19 @@ export class Machine {
 
   doRet() {
     if (!this.CS.length) this.fault("StackUnderflow", "RET with empty call stack");
-    const [chain, vertex, f, p] = this.CS.pop();
+    const [chain, vertex, f, p, s] = this.CS.pop();
     this.A = vsub(this.P, p);
     this.F = f;
+    this.S = s;
     this.chain = chain;
     this.vertex = vertex;
+  }
+
+  setScale(s) {
+    if (!(s >= 2 ** -32 && s <= 2 ** 32)) {
+      this.fault("ScaleOverflow", `scale ${s} outside [2^-32, 2^32]`);
+    }
+    this.S = s;
   }
 
   pickBranch(edges) {
@@ -388,7 +402,8 @@ export class Machine {
     const o = OPCODES.get(key(triple));
     const frm = this.vertex;
     const p0 = this.P.slice();
-    this.P = vadd(this.P, vraw);
+    const moved = vscale(vraw, this.S);
+    this.P = vadd(this.P, moved);
     this.vertex = edge.to;
     const skipped = this.skip;
     this.steps += 1;
@@ -412,9 +427,9 @@ export class Machine {
     if (this.trace) {
       this.trace.push({
         step: stepNo, chain: this.chain, frm, to: this.vertex,
-        P0: p0, P1: vadd(p0, vraw), F: this.F.slice(), opcode: o.mnemonic,
+        P0: p0, P1: vadd(p0, moved), F: this.F.slice(), opcode: o.mnemonic,
         klass: o.klass, n, A: this.A.slice(), skipped, branch: isBranch,
-        outLen: this.OUT.length,
+        outLen: this.OUT.length, s: this.S,
       });
       for (const rec of this.pendingTrace) this.trace.push(rec);
     }

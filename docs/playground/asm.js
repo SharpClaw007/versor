@@ -93,14 +93,28 @@ function operand(mnemonic, args, ln, chainIds, nChains) {
   }
   if (mnemonic === "CALL") {
     if (!args) throw err(ln, "CALL needs a chain index or name");
+    const parts = args.split(/\s+/);
+    if (parts.length > 2) throw err(ln, "CALL takes: chain [scale]");
+    const target = parts[0];
     let cid;
-    if (args in chainIds) cid = chainIds[args];
+    if (target in chainIds) cid = chainIds[target];
     else {
-      cid = Number(args);
-      if (!Number.isInteger(cid)) throw err(ln, `CALL: unknown chain '${args}'`);
+      cid = Number(target);
+      if (!Number.isInteger(cid)) throw err(ln, `CALL: unknown chain '${target}'`);
     }
     if (cid < 0 || cid >= nChains) throw err(ln, `CALL: chain ${cid} out of range (0..${nChains - 1})`);
-    return cid + 0.5;
+    let frac = 0.5;
+    if (parts.length === 2) {
+      const scale = parseNum(parts[1], ln, "CALL scale");
+      if (scale !== 1.0) {
+        frac = 0.5 + Math.log2(scale) / 2.0;
+        if (!(frac >= -1e-9 && frac < 1.0 - 1e-6)) {
+          throw err(ln, `CALL: scale ${scale} outside [0.5, 2); compose nested calls for more`);
+        }
+        frac = Math.max(frac, 0.0);
+      }
+    }
+    return cid + frac;
   }
   if (mnemonic in DEFAULT_N) {
     const n = args ? parseNum(args, ln, mnemonic) : DEFAULT_N[mnemonic];

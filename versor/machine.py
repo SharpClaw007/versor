@@ -58,10 +58,14 @@ class RunResult:
 
 
 class Machine:
+    SCALE_MIN = 2.0 ** -32
+    SCALE_MAX = 2.0 ** 32
+
     def __init__(self, program: Program, *, decoder: str | None = None,
                  step_budget: int = DEFAULT_STEP_BUDGET,
                  max_call_depth: int = DEFAULT_MAX_CALL_DEPTH,
-                 F0: Quat | None = None, P0=None, trace: Trace | None = None):
+                 F0: Quat | None = None, P0=None, S0: float = 1.0,
+                 trace: Trace | None = None):
         self.program = program
         self.decoder = get_decoder(decoder or program.decoder)
         self.step_budget = step_budget
@@ -71,6 +75,7 @@ class Machine:
         self.P = np.zeros(3) if P0 is None else np.asarray(P0, dtype=float).copy()
         self._P_start = self.P.copy()
         self.F = F0 if F0 is not None else Quat.identity()
+        self.S = float(S0)  # Sim(3) scale: movement is P += S * v_raw
         self.A = np.zeros(3)
         self.R = [np.zeros(3) for _ in range(4)]
         self.M: dict[tuple[int, int, int], np.ndarray] = {}
@@ -126,7 +131,8 @@ class Machine:
                 self.fault(f.kind, f.message)
             op = _OPS[triple]
             p0 = self.P.copy()
-            self.P = self.P + w
+            moved = self.S * w
+            self.P = self.P + moved
             self.steps += 1
             step_no = self.steps
             slot = len(self._pending_trace)  # deeper EXECs append after us;
@@ -134,9 +140,9 @@ class Machine:
             if self.trace is not None:
                 self._pending_trace.insert(slot, dict(
                     step=step_no, chain=self.chain, frm=self.vertex,
-                    to=self.vertex, P0=p0, P1=p0 + w, F=self.F.as_tuple(),
+                    to=self.vertex, P0=p0, P1=p0 + moved, F=self.F.as_tuple(),
                     opcode="@" + op.mnemonic, klass=op.klass, n=n,
-                    A=self.A.copy(), out_len=len(self.OUT)))
+                    A=self.A.copy(), out_len=len(self.OUT), s=self.S))
         finally:
             self._exec_depth -= 1
 
@@ -144,10 +150,17 @@ class Machine:
         """Shared by the RET opcode and implicit RET at chain end."""
         if not self.CS:
             self.fault("StackUnderflow", "RET with empty call stack")
-        chain, vertex, f_saved, p_saved = self.CS.pop()
+        chain, vertex, f_saved, p_saved, s_saved = self.CS.pop()
         self.A = self.P - p_saved      # return value = callee net displacement
         self.F = f_saved               # frame changes are callee-local
+        self.S = s_saved               # ...and so is scale (Sim(3), v0.3b)
         self.chain, self.vertex = chain, vertex
+
+    def set_scale(self, s: float) -> None:
+        if not (self.SCALE_MIN <= s <= self.SCALE_MAX):
+            self.fault("ScaleOverflow",
+                       f"scale {s:.3g} outside [2^-32, 2^32]")
+        self.S = s
 
     # --- execution ---
 
@@ -180,7 +193,7 @@ class Machine:
                         step=self.steps, chain=self.chain, frm=frm, to=self.vertex,
                         P0=self.P.copy(), P1=self.P.copy(), F=self.F.as_tuple(),
                         opcode="RET*", klass="control", n=0.0, A=self.A.copy(),
-                        out_len=len(self.OUT))
+                        out_len=len(self.OUT), s=self.S)
             return
 
         is_branch = len(edges) > 1
@@ -199,7 +212,8 @@ class Machine:
 
         frm = self.vertex
         p0 = self.P.copy()
-        self.P = self.P + v_raw          # move ...
+        moved = self.S * v_raw           # scale at move time (Sim(3))
+        self.P = self.P + moved          # move ...
         self.vertex = edge.to
         skipped = self.skip
         self.steps += 1
@@ -219,9 +233,9 @@ class Machine:
         if self.trace is not None:
             self.trace.record(
                 step=step_no, chain=self.chain, frm=frm, to=self.vertex,
-                P0=p0, P1=p0 + v_raw, F=self.F.as_tuple(), opcode=op.mnemonic,
+                P0=p0, P1=p0 + moved, F=self.F.as_tuple(), opcode=op.mnemonic,
                 klass=op.klass, n=n, A=self.A.copy(), skipped=skipped,
-                branch=is_branch, out_len=len(self.OUT))
+                branch=is_branch, out_len=len(self.OUT), s=self.S)
             for rec in self._pending_trace:  # EXEC'd instructions, in order
                 self.trace.record(**rec)
         self._pending_trace.clear()

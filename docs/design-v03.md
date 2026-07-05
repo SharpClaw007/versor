@@ -1,7 +1,11 @@
 # Design: the three deferred extensions
 
-> Status: **EXEC (§2) implemented in v0.3a.** Q2 and the extended ISA
-> remain as planned below. Ordering: EXEC (v0.3a) → Sim(3)
+> Status: **EXEC (§2) implemented in v0.3a; Sim(3) scale (§1) implemented
+> in v0.3b** (scale range per call is [0.5, 2), closed on the left — frac 0
+> is representable). Implementation finding: frame-covariant recursion
+> needs orientation-specialized chain clones, so the fractal showpiece is
+> the pure-scale `zoom.vsr` rather than a turning Koch/Lévy curve (see
+> whitepaper §12.1). The extended ISA below remains planned. Ordering: EXEC (v0.3a) → Sim(3)
 > scale (v0.3b) → extended ISA "Versor-32" (v0.4). Each lands with a spec
 > addendum here (the original `versor-design.md` stays as written), a
 > whitepaper section, JS-port parity + golden regeneration, and README

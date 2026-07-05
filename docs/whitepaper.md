@@ -525,11 +525,22 @@ The implementation's numerical rules, in terms of the structures above:
 
 ## 12. Open problems
 
-1. **Scale as an argument channel** (spec Q2) would enlarge the pose group
-   from $SE(3)$ to the similarity group $\mathrm{Sim}(3)$; Theorem 5
-   survives with $R$ replaced by a similarity iff operand semantics scale
-   coherently — the interaction with $\lfloor n \rfloor \bmod 4$ register
-   indexing is the obstruction to check first.
+1. ~~Scale as an argument channel~~ (spec Q2) — shipped in v0.3b. The pose
+   group is now $\mathrm{Sim}(3)$: a scalar $s$ multiplies *movement*
+   ($P \mathrel{+}= s\,v$) but not operands, sidestepping the register-index
+   obstruction ($\lfloor s\,n \rfloor \bmod 4$ would retarget registers,
+   which is why operand scaling was rejected). Scale rides `CALL`'s
+   fractional magnitude, $s' = s\cdot 2^{\,2\,\mathrm{frac}(n)-1}$, with the
+   builder's `idx + 0.5` convention giving factor exactly 1; `RET`/`POPF`
+   restore it. One consequence discovered in implementation deserves
+   emphasis: **frame-covariant recursion is impossible with plain chains.**
+   A callee's raw vectors decode under the caller's live frame, so a chain
+   behaves identically only across call sites sharing an orientation —
+   scaled self-similar recursion works straight off (`zoom.vsr`), but
+   fractals with *turns* (Koch, Lévy) require orientation-specialized chain
+   clones, one per call-site frame class. That cloning transform is
+   exactly what a compiler targeting Versor would have to do, and remains
+   open.
 2. **Executable memory** (spec Q4): stored vectors as code would make the
    step map depend on $M$ along the path, breaking the piecewise-constant
    structure of §8 in interesting ways (program space becomes

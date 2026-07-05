@@ -22,6 +22,7 @@ class StepRecord:
     skipped: bool = False    # segment moved but was not executed (JMPZ/JMPP)
     branch: bool = False     # segment was chosen at a branch vertex
     out_len: int = 0         # length of the OUT buffer after this step
+    s: float = 1.0           # Sim(3) scale after this step (v0.3b)
 
 
 class Trace:

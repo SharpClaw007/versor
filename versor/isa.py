@@ -149,7 +149,11 @@ def _call(m, n):
     if len(m.CS) >= m.max_call_depth:
         raise VersorFault("CallStackOverflow", f"call depth {m.max_call_depth} exceeded")
     # m.vertex was already advanced to the CALL edge's target = return address.
-    m.CS.append((m.chain, m.vertex, m.F, m.P.copy()))
+    m.CS.append((m.chain, m.vertex, m.F, m.P.copy(), m.S))
+    # the fractional magnitude is the scale argument (Sim(3), v0.3b):
+    # frac = 0.5 (the builder's idx + 0.5 convention) means factor 1.
+    frac = n - math.floor(n)
+    m.set_scale(m.S * 2.0 ** (2.0 * frac - 1.0))
     m.chain = cid
     m.vertex = m.program.chains[cid].entry
 
@@ -169,14 +173,15 @@ def _jmpp(m, n):
 
 
 def _pushf(m, n):
-    m.AUX.append((m.F, m.P.copy()))
+    m.AUX.append((m.F, m.P.copy(), m.S))
 
 
 def _popf(m, n):
     if not m.AUX:
         raise VersorFault("StackUnderflow", "POPF on empty aux stack")
-    f, _p = m.AUX.pop()
-    m.F = f  # frame only; position is NOT restored (spec open Q3)
+    f, _p, s = m.AUX.pop()
+    m.F = f   # frame and scale; position is NOT restored (spec open Q3)
+    m.S = s
 
 
 def _nop(m, n):

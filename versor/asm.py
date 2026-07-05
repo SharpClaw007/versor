@@ -154,16 +154,29 @@ def _operand(mnemonic: str, args: str, ln: int,
     if mnemonic == "CALL":
         if not args:
             raise _err(ln, "CALL needs a chain index or name")
-        if args in chain_ids:
-            cid = chain_ids[args]
+        parts = args.split()
+        target, scale_s = parts[0], (parts[1] if len(parts) > 1 else None)
+        if len(parts) > 2:
+            raise _err(ln, "CALL takes: chain [scale]")
+        if target in chain_ids:
+            cid = chain_ids[target]
         else:
             try:
-                cid = int(args)
+                cid = int(target)
             except ValueError:
-                raise _err(ln, f"CALL: unknown chain {args!r}")
+                raise _err(ln, f"CALL: unknown chain {target!r}")
         if not 0 <= cid < n_chains:
             raise _err(ln, f"CALL: chain {cid} out of range (0..{n_chains - 1})")
-        return cid + 0.5
+        frac = 0.5
+        if scale_s is not None:
+            scale = _parse_num(scale_s, ln, "CALL scale")
+            if scale != 1.0:
+                frac = 0.5 + math.log2(scale) / 2.0
+                if not -1e-9 <= frac < 1.0 - 1e-6:
+                    raise _err(ln, f"CALL: scale {scale} outside [0.5, 2); "
+                                   "compose nested calls for more")
+                frac = max(frac, 0.0)
+        return cid + frac
     if mnemonic in DEFAULT_N:
         n = _parse_num(args, ln, mnemonic) if args else DEFAULT_N[mnemonic]
         if mnemonic == "EXEC" and n < 2.0:
