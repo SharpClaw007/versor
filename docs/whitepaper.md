@@ -513,7 +513,11 @@ The implementation's numerical rules, in terms of the structures above:
    interpreter's finite step budget into the statement.
 5. **The six reserved cones** of `icosa32` await opcodes; candidates should
    respect the antipodal symmetry of the current assignment.
-6. **Equal-area decoding**: a partition with equal cell measures and
-   maximal margins (a spherical-code optimization) would trade cubic-26's
-   authoring simplicity for uniform opcode robustness — the decoder
-   interface already admits it.
+6. ~~Equal-area decoding~~ — shipped as `sphere26`: an antipodal 13-line
+   packing found by annealed Riesz repulsion (`tools/optimize_sphere26.py`;
+   the cubic seed and every random restart converge to the same 38.17°
+   minimum separation, so it is plausibly the optimal antipodal packing).
+   All 26 opcodes, no reserved cones, near-uniform margins: 92.5 % of the
+   sphere decodes, versus 72.2 % for cubic-26 and 73.7 % for icosa32. What
+   remains open is a *proof* of packing optimality and a decoder whose cell
+   *areas* (not just margins) are equalized.

@@ -48,9 +48,10 @@ screw motions, and the geometry of program space — is worked out in the
 ## Features
 
 - **Vector ISA** — direction quantized against the frame picks one of 26 opcodes;
-  magnitude is the immediate operand. Two pluggable decoders: `cubic26`
-  (component thresholds) and `icosa32` (nearest-neighbor over the 32 icosahedral
-  directions).
+  magnitude is the immediate operand. Three pluggable decoders: `cubic26`
+  (component thresholds), `icosa32` (nearest-neighbor over the 32 icosahedral
+  directions), and `sphere26` (optimized antipodal packing — 92.5% of the
+  sphere decodes vs cubic's 72.2%).
 - **Orientation frame** — a unit quaternion the program itself rotates with
   **ROTF/ROTG/ROTH**; non-commutativity of SO(3) is a feature, not a bug.
 - **Functions are shapes** — `CALL` executes a stored chain under the caller's

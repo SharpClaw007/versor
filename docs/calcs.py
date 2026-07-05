@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np  # noqa: E402
 
-from versor.decode import ICOSA_MARGIN, PHI, Cubic26, Icosa32  # noqa: E402
+from versor.decode import PHI, Cubic26, Icosa32, Sphere26  # noqa: E402
 from versor.errors import VersorFault  # noqa: E402
 
 
@@ -39,8 +39,7 @@ def cubic26_partition(n):
                  if k != "dead" else ""))
 
 
-def icosa32_partition(n):
-    dec = Icosa32()
+def nn_partition(dec, n):
     v = sphere_samples(n)
     ok = dead = reserved = 0
     for x in v:
@@ -52,9 +51,9 @@ def icosa32_partition(n):
                 reserved += 1
             else:
                 dead += 1
-    print(f"icosa32 partition: assigned {ok / n:.4f}, "
+    print(f"{dec.name} partition: assigned {ok / n:.4f}, "
           f"reserved {reserved / n:.4f}, dead zone {dead / n:.4f} "
-          f"(margin {ICOSA_MARGIN})")
+          f"(margin {dec.margin})")
 
 
 def icosa_angles():
@@ -65,12 +64,13 @@ def icosa_angles():
           f"= {e_cos:.6f} -> {math.degrees(math.acos(e_cos)):.2f} deg")
     print(f"face assignment angle:  cos = phi/sqrt(3) "
           f"= {f_cos:.6f} -> {math.degrees(math.acos(f_cos)):.2f} deg")
-    # minimum angular gap between any two of the 32 directions
-    m = Icosa32()._matrix
-    dots = np.clip(m @ m.T, -1, 1)
-    np.fill_diagonal(dots, -1)
-    print(f"closest pair of icosa32 directions: "
-          f"{math.degrees(math.acos(dots.max())):.2f} deg apart")
+    # minimum angular gap within each nearest-neighbor direction set
+    for dec in (Icosa32(), Sphere26()):
+        m = dec._matrix
+        dots = np.clip(m @ m.T, -1, 1)
+        np.fill_diagonal(dots, -1)
+        print(f"closest pair of {dec.name} directions: "
+              f"{math.degrees(math.acos(dots.max())):.2f} deg apart")
 
 
 def interpolation_bands():
@@ -97,7 +97,8 @@ def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 2_000_000
     print(f"[{n:,} sphere samples]")
     cubic26_partition(n)
-    icosa32_partition(n // 4)
+    nn_partition(Icosa32(), n // 4)
+    nn_partition(Sphere26(), n // 4)
     icosa_angles()
     interpolation_bands()
 

@@ -1,10 +1,13 @@
 """Direction quantization: unit vector -> opcode sign triple.
 
-Two decoders ship:
+Three decoders ship:
 
 - ``cubic26`` (v0.1 default): snap components to {-1, 0, +1} at threshold 0.35.
 - ``icosa32`` (M6): nearest-neighbor over the 32 directions of icosahedral
   symmetry (12 icosahedron vertices + 20 face normals).
+- ``sphere26``: nearest-neighbor over an optimized antipodal packing of all
+  26 opcode directions (no reserved cones, near-uniform margins; generated
+  by tools/optimize_sphere26.py).
 
 Icosahedral symmetry has orbit sizes 12/20/30 — there is no 26-direction
 icosahedral set, so icosa32 keeps the 26-opcode ISA by *assigning* each opcode
@@ -121,32 +124,33 @@ def _icosa_assignment() -> list[tuple[np.ndarray, tuple[int, int, int] | None]]:
     return [(v / np.linalg.norm(v), triple) for v, triple in entries]
 
 
-class Icosa32:
-    """Nearest-neighbor over the 32 icosahedral directions (M6)."""
+class _NearestNeighbor:
+    """Nearest-neighbor decoding over a fixed direction set with a relative
+    cosine-gap ambiguity margin. Subclasses set name and provide entries."""
 
-    name = "icosa32"
+    name = "abstract"
+    margin = ICOSA_MARGIN
 
-    def __init__(self):
-        entries = _icosa_assignment()
-        self._matrix = np.array([v for v, _ in entries])   # 32 x 3
+    def __init__(self, entries):
+        self._matrix = np.array([v for v, _ in entries])
         self._triples = [t for _, t in entries]
 
     def decode(self, unit_v: np.ndarray) -> tuple[int, int, int]:
         dots = self._matrix @ np.asarray(unit_v, dtype=float)
         order = np.argsort(dots)
         best, second = int(order[-1]), int(order[-2])
-        if dots[best] - dots[second] < ICOSA_MARGIN:
+        if dots[best] - dots[second] < self.margin:
             raise VersorFault(
                 "AmbiguousDirection",
-                f"within {ICOSA_MARGIN} of an icosa32 cone boundary "
+                f"within {self.margin} of a {self.name} cone boundary "
                 f"(unit vector {np.round(unit_v, 4).tolist()})",
             )
         triple = self._triples[best]
         if triple is None:
             raise VersorFault(
                 "ReservedDirection",
-                f"direction {np.round(self._matrix[best], 4).tolist()} is one "
-                "of the 6 unassigned icosa32 cones",
+                f"direction {np.round(self._matrix[best], 4).tolist()} is a "
+                f"reserved {self.name} cone",
             )
         return triple
 
@@ -155,7 +159,52 @@ class Icosa32:
                 if t is not None}
 
 
-DECODERS = {"cubic26": Cubic26, "icosa32": Icosa32}
+class Icosa32(_NearestNeighbor):
+    """Nearest-neighbor over the 32 icosahedral directions (M6)."""
+
+    name = "icosa32"
+
+    def __init__(self):
+        super().__init__(_icosa_assignment())
+
+
+# Antipodal 13-line packing found by tools/optimize_sphere26.py (Riesz s=12,
+# annealed, 40 random restarts + cubic seed all converge here): minimum
+# pairwise separation 38.17 deg vs cubic-26's 35.26, with near-uniform
+# margins and no reserved directions. Labels are matched to the nearest
+# cubic triples (max drift ~33 deg) but the assignment is semantics-neutral.
+_SPHERE26_TABLE = [
+    ((-0.600301876388214, -0.598848634433877, +0.530111280998122), (-1, -1, 1)),
+    ((-0.446406946572806, +0.184324847647420, -0.875639873801610), (-1, 0, -1)),
+    ((-0.869932147354444, +0.045068511287929, +0.491107817377789), (-1, 0, 1)),
+    ((-0.691661090487099, -0.713721202769234, -0.110485205452290), (-1, -1, 0)),
+    ((+0.049935126077074, -0.699471611273205, +0.712913703197331), (0, -1, 1)),
+    ((-0.747469029906257, +0.558081339546148, -0.360326612646605), (-1, 1, -1)),
+    ((-0.223030638816671, +0.964599211521904, -0.140732708637151), (-1, 1, 0)),
+    ((+0.199787421253120, -0.492401221198910, -0.847128103459477), (0, -1, -1)),
+    ((-0.647304747219036, +0.683174579798115, +0.338037065638325), (-1, 1, 1)),
+    ((+0.290837759716615, +0.152210094231070, -0.944587468018282), (0, 0, -1)),
+    ((-0.971777467495341, -0.082639230854734, -0.220950924850019), (-1, 0, 0)),
+    ((-0.111562925436732, -0.901734944353629, -0.417645548042304), (0, -1, 0)),
+    ((-0.528894555907088, -0.449926282823061, -0.719608844273656), (-1, -1, -1)),
+]
+
+
+class Sphere26(_NearestNeighbor):
+    """Optimized antipodal packing: all 26 opcodes, near-uniform margins."""
+
+    name = "sphere26"
+
+    def __init__(self):
+        entries = []
+        for v, t in _SPHERE26_TABLE:
+            vec = np.array(v)
+            entries.append((vec, t))
+            entries.append((-vec, tuple(-c for c in t)))
+        super().__init__(entries)
+
+
+DECODERS = {"cubic26": Cubic26, "icosa32": Icosa32, "sphere26": Sphere26}
 
 
 def get_decoder(name: str):
