@@ -428,8 +428,10 @@ unions of cells and homotopy classes of paths between them.
 ## 9. Computability sketch
 
 Two-counter Minsky machines are Turing complete, and Versor hosts them
-directly (spec open question 1; this section is a construction sketch, not
-a mechanized proof). Keep $R_0 = (1,0,0)$ as the unit, and counters as
+directly (spec open question 1). The construction below is **mechanized**:
+`versor/minsky.py` compiles arbitrary `Inc`/`DecJz` programs to chains, and
+`tests/test_minsky.py` runs transfer, doubling, and multiplication machines
+end to end. Keep $R_0 = (1,0,0)$ as the unit, and counters as
 $R_1 = (c_1, 0, 0)$, $R_2 = (c_2, 0, 0)$.
 
 - **INC($c_j$):** `MOVA j; ADD 0; MOVR j` — four segments of straight-line
@@ -505,8 +507,10 @@ The implementation's numerical rules, in terms of the structures above:
    as subsets of $\mathbb{R}^3$ and ask when two paths are equivalent
    through path homotopy in the complement — §8's cell decomposition is the
    finite shadow of that question.
-4. **Mechanize §9** — implement the Minsky gadgets as a `.vasm` generator
-   and test the reduction end to end.
+4. ~~Mechanize §9~~ — done: `versor/minsky.py` compiles Minsky programs to
+   chains, tested end to end. The remaining formal gap is a machine-checked
+   proof that the gadget semantics match (e.g. in Lean), plus lifting the
+   interpreter's finite step budget into the statement.
 5. **The six reserved cones** of `icosa32` await opcodes; candidates should
    respect the antipodal symmetry of the current assignment.
 6. **Equal-area decoding**: a partition with equal cell measures and
