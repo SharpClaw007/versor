@@ -192,6 +192,10 @@ def main(argv=None) -> int:
                     help="output path (default: input with .vsr extension)")
     pa.set_defaults(fn=cmd_asm)
 
+    pl2 = sub.add_parser("lsp", help="start the language server (stdio)")
+    pl2.set_defaults(fn=lambda args: __import__(
+        "versor.lsp", fromlist=["main"]).main())
+
     pv = sub.add_parser("vhl", help="compile a .vhl file to .vsr")
     pv.add_argument("file")
     pv.add_argument("-o", "--out", default=None,

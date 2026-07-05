@@ -27,7 +27,8 @@ Playground = "https://sharpclaw007.github.io/versor/playground/"
 Whitepaper = "https://github.com/SharpClaw007/versor/blob/main/docs/whitepaper.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pygls>=1.3,<2"]
+lsp = ["pygls>=1.3,<2"]
 
 [project.scripts]
 versor = "versor.cli:main"
