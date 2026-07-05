@@ -12,10 +12,13 @@ from .trace import Trace
 
 
 def _load_any(path: str):
-    """Load .vsr directly; assemble .vasm on the fly."""
+    """Load .vsr directly; assemble .vasm / compile .vhl on the fly."""
     if path.endswith(".vasm"):
         from .asm import assemble_path
         return assemble_path(path).build()
+    if path.endswith(".vhl"):
+        from .vhl import compile_path
+        return compile_path(path).build()
     return load(path)
 
 
@@ -96,6 +99,22 @@ def cmd_asm(args) -> int:
     return 0
 
 
+def cmd_vhl(args) -> int:
+    import os
+
+    from .vhl import compile_path
+    try:
+        pb = compile_path(args.file)
+        out = args.out or os.path.splitext(args.file)[0] + ".vsr"
+        prog = pb.save(out)
+    except LoadError as e:
+        print(f"vhl error: {e}", file=sys.stderr)
+        return 2
+    n_segs = sum(len(es) for ch in prog.chains for es in ch.vertices.values())
+    print(f"{out}: {n_segs} segment(s)")
+    return 0
+
+
 def cmd_export(args) -> int:
     if not (args.gcode or args.obj or args.stl):
         print("export: pass at least one of --gcode/--obj/--stl", file=sys.stderr)
@@ -162,6 +181,12 @@ def main(argv=None) -> int:
     pa.add_argument("-o", "--out", default=None,
                     help="output path (default: input with .vsr extension)")
     pa.set_defaults(fn=cmd_asm)
+
+    pv = sub.add_parser("vhl", help="compile a .vhl file to .vsr")
+    pv.add_argument("file")
+    pv.add_argument("-o", "--out", default=None,
+                    help="output path (default: input with .vsr extension)")
+    pv.set_defaults(fn=cmd_vhl)
 
     args = p.parse_args(argv)
     return args.fn(args)
