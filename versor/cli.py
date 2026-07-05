@@ -196,6 +196,10 @@ def main(argv=None) -> int:
     pl2.set_defaults(fn=lambda args: __import__(
         "versor.lsp", fromlist=["main"]).main())
 
+    pre = sub.add_parser("repl", help="interactive line-at-a-time .vasm")
+    pre.set_defaults(fn=lambda args: __import__(
+        "versor.repl", fromlist=["main"]).main())
+
     pv = sub.add_parser("vhl", help="compile a .vhl file to .vsr")
     pv.add_argument("file")
     pv.add_argument("-o", "--out", default=None,
