@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "VHL",
+  "scopeName": "source.vhl",
+  "fileTypes": ["vhl"],
+  "patterns": [
+    { "match": "#.*$", "name": "comment.line.number-sign.vhl" },
+    { "match": "\\b(let|print|repeat)\\b", "name": "keyword.control.vhl" },
+    { "match": "\\binput\\b(?=\\s*\\()", "name": "support.function.vhl" },
+    { "match": "\\b\\d+(\\.\\d+)?\\b", "name": "constant.numeric.vhl" },
+    { "match": "[+\\-*=]", "name": "keyword.operator.vhl" },
+    { "match": "\\b[A-Za-z_]\\w*\\b", "name": "variable.other.vhl" }
+  ]
+}

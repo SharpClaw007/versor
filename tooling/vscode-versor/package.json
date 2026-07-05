@@ -1,0 +1,55 @@
+{
+  "name": "versor",
+  "displayName": "Versor",
+  "description": "Language support for Versor (.vasm assembly and .vhl): syntax highlighting, diagnostics, hover docs, go-to-definition, completion via the versor LSP.",
+  "version": "0.4.0",
+  "publisher": "versor-lang",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/SharpClaw007/versor" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages"],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "vasm",
+        "aliases": ["Versor Assembly"],
+        "extensions": [".vasm"],
+        "configuration": "./language-configuration-vasm.json"
+      },
+      {
+        "id": "vhl",
+        "aliases": ["VHL"],
+        "extensions": [".vhl"],
+        "configuration": "./language-configuration-vhl.json"
+      }
+    ],
+    "grammars": [
+      { "language": "vasm", "scopeName": "source.vasm", "path": "./syntaxes/vasm.tmLanguage.json" },
+      { "language": "vhl", "scopeName": "source.vhl", "path": "./syntaxes/vhl.tmLanguage.json" }
+    ],
+    "configuration": {
+      "title": "Versor",
+      "properties": {
+        "versor.serverCommand": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["versor", "lsp"],
+          "description": "Command to launch the Versor language server (needs `pip install 'versor[lsp]'` on PATH, or point at a venv's bin/versor)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.js --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "package": "npm run build && vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^2.24.0",
+    "esbuild": "^0.20.0"
+  }
+}

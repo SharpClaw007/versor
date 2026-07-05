@@ -7,3 +7,6 @@ build/
 dist/
 .DS_Store
 sandbox/
+tooling/vscode-versor/node_modules/
+tooling/vscode-versor/out/
+*.vsix
