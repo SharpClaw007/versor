@@ -9,15 +9,17 @@
 Every instruction is a vector: its direction selects the opcode, its magnitude is
 the operand, and a quaternion frame decides what everything means. Programs are
 polylines through 3D space; memory is space itself; a function's return value is
-its net displacement. This is the v0.1 reference implementation — interpreter,
-`.vsr` format, builder API, and 3D execution visualizer.
+its net displacement. This is the reference implementation — interpreter,
+assembler, a tiny high-level language, 3D execution visualizer, physical
+export, and continuous program-space tools.
+**[Try it in the browser →](https://sharpclaw007.github.io/versor/playground/)**
 
+[![Playground](https://img.shields.io/badge/playground-live-14b8a6)](https://sharpclaw007.github.io/versor/playground/)
+[![CI](https://github.com/SharpClaw007/versor/actions/workflows/ci.yml/badge.svg)](https://github.com/SharpClaw007/versor/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![NumPy](https://img.shields.io/badge/NumPy-2-013243?logo=numpy&logoColor=white)](https://numpy.org/)
-[![Matplotlib](https://img.shields.io/badge/Matplotlib-3-11557C)](https://matplotlib.org/)
-[![Tests](https://img.shields.io/badge/tests-114%20passing-brightgreen)](tests/)
 [![Spec](https://img.shields.io/badge/spec-v0.1-a855f7)](versor-design.md)
-[![Whitepaper](https://img.shields.io/badge/math-whitepaper-14b8a6)](docs/whitepaper.md)
+[![Whitepaper](https://img.shields.io/badge/math-whitepaper-11557C)](docs/whitepaper.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 <br />
@@ -69,6 +71,21 @@ screw motions, and the geometry of program space — is worked out in the
 - **Assembler** — a text syntax (`.vasm`) with labels, named chains, guard
   shorthand, and `pi`-expression angles; `versor asm` compiles it to `.vsr`,
   and `versor run` executes it directly.
+- **VHL** — a tiny high-level language (`let` / `print` / `repeat` with full
+  expression arithmetic) compiling to chains; register allocation is a
+  3-slot pool because spilling to positional memory is literally a
+  path-planning problem (`versor/vhl.py`).
+- **Browser playground** — the interpreter and assembler ported to JS
+  ([bit-parity with Python enforced in CI](docs/playground/test/)), with an
+  orbitable three.js trace, live frame triad, and step/opcode/OUT HUD.
+- **Turing complete, mechanized** — `versor/minsky.py` compiles two-counter
+  Minsky machines to chains; the reduction runs end to end in the tests.
+- **Continuous program space** — a program is a point of ℝ^{3m}: interpolate
+  between implementations, measure per-segment robustness, and repair
+  scrambled programs with an evolution strategy (`versor/synth.py`).
+- **Physical export** — a run is a toolpath: `versor export` emits G-code
+  (plot a computation on a pen plotter), OBJ polylines, and printable STL
+  tube meshes.
 - **Load-time lint + located faults** — dead-zone warnings at load;
   `AmbiguousDirection`, `DivisionByZero`, `CallStackOverflow`, `StackUnderflow`,
   `StepBudgetExhausted` and friends carry step/chain/vertex.
@@ -135,20 +152,28 @@ tracks step, opcode, accumulator, and the OUT buffer.
 ```
 versor/
 ├── quat.py        # Hand-rolled unit quaternions
-├── decode.py      # Cubic-26 quantizer + dead-zone rule (pluggable)
+├── decode.py      # Pluggable decoders: cubic26, icosa32, sphere26
 ├── isa.py         # Opcode table: sign triple -> handler
 ├── machine.py     # Machine state + step() + run()
 ├── loader.py      # .vsr JSON <-> chain graphs, validation, lint
 ├── builder.py     # Fluent authoring API with frame tracking
 ├── asm.py         # .vasm text assembler (front-end over the builder)
-├── interp.py      # M6: program-space lerp + interpolant classification
+├── vhl.py         # VHL: let/print/repeat -> chains
+├── minsky.py      # Two-counter Minsky machines -> chains (spec Q1)
+├── interp.py      # Program-space lerp + interpolant classification
+├── synth.py       # Robustness maps + (1+lambda) evolutionary search
+├── export.py      # G-code / OBJ / STL export of executed traces
 ├── trace.py       # Per-step execution records
-├── viz.py         # 3D renders + animation
-├── cli.py         # python -m versor run | lint
+├── viz.py         # 3D renders + execution GIFs
+├── cli.py         # python -m versor run|asm|vhl|export|lint
 └── examples.py    # The milestone programs, one source of truth
-tests/             # 114 tests: quat, decode, ISA, loader, asm, viz, milestones, M6
-examples/          # Generated .vsr files, hand-written .vasm, renders
-docs/              # Whitepaper + calcs.py + brand assets + screenshots
+docs/
+├── whitepaper.md  # The mathematics (+ calcs.py reproducing every number)
+└── playground/    # Browser playground: JS port + three.js, parity-tested
+tests/             # 172 tests: everything above, incl. milestone acceptance
+examples/          # .vsr / .vasm / .vhl programs, renders, demo scripts
+tools/             # sphere26 optimizer, golden-file generator
+tooling/           # .vasm TextMate grammar
 ```
 
 ## Getting started
@@ -168,9 +193,12 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 | `python -m versor run FILE.vsr --animate out.gif` | Execution GIF (cursor, frame triad, HUD); `--fps`, `--spin` |
 | `python -m versor run FILE.vsr --decoder icosa32` | Override the program's decoder        |
 | `python -m versor asm FILE.vasm [-o out.vsr]`  | Assemble Versor assembly to `.vsr`       |
+| `python -m versor vhl FILE.vhl [-o out.vsr]`   | Compile VHL to `.vsr` (run also takes `.vhl`) |
+| `python -m versor export FILE --gcode/--obj/--stl` | Toolpath / mesh export of a run      |
 | `python -m versor lint FILE.vsr`               | Validate + dead-zone lint                |
 | `python examples/make_examples.py`             | Regenerate all example .vsr + renders    |
-| `python examples/interpolate.py`               | Regenerate the M6 interpolation study    |
+| `python examples/interpolate.py`               | Regenerate the interpolation study       |
+| `python examples/synthesize.py`                | Regenerate robustness + evolution plots  |
 | `python -m pytest`                             | Run the test suite                       |
 
 Programs are authored in Versor assembly (hand-writing raw vectors is possible
@@ -260,6 +288,25 @@ for chains, `CALL` by name, and frame rotation in assembly.
 
 </details>
 
+## Continuous program space
+
+A program with fixed topology is a point of $\mathbb{R}^{3m}$ — behavior is
+a piecewise-constant function on that space, and the repo ships tools that
+treat it as one (whitepaper §8):
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/robustness.png" alt="Horizontal bar chart of per-segment perturbation tolerance for countdown; LOADI segments show zero tolerance" /><br />
+      <sub><b>Robustness map</b> (<code>versor/synth.py</code>) — how far each segment can move before behavior changes. Value-carrying LOADIs have tolerance <em>zero</em> (their magnitude IS the output); structure-carrying segments tolerate 0.15–0.31.</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/evolution.png" alt="Fitness curve of an evolution strategy repairing a scrambled countdown over 75 generations" /><br />
+      <sub><b>Evolutionary repair</b> — a (1+16) evolution strategy recovers exact countdown behavior from a fully scrambled program in 75 generations. No AST operators, no grammar: mutation is Gaussian noise on geometry.</sub>
+    </td>
+  </tr>
+</table>
+
 ## M6 — the icosahedral dialect & program interpolation
 
 **`icosa32` decoder.** Icosahedral symmetry has orbit sizes 12/20/30, so a
@@ -299,6 +346,17 @@ decodes as PROJ — a different program with identical behavior. Regenerate with
 | M4        | Position-addressed memory (`memory.vsr`)               | ✅     |
 | M5        | Showpieces (`hello.vsr`, `fib.vsr`) + renders          | ✅     |
 | M6        | Icosahedral decoder + program interpolation (stretch)  | ✅     |
+
+### Beyond the spec
+
+`.vasm` assembler · VHL compiler · `sphere26` optimized decoder · mechanized
+Minsky reduction (Turing completeness, spec Q1) · robustness maps +
+evolutionary synthesis · G-code/OBJ/STL export ·
+[browser playground](https://sharpclaw007.github.io/versor/playground/)
+(JS port, parity-tested in CI) · execution GIFs · the
+[whitepaper](docs/whitepaper.md). Deliberately deferred to their own design
+rounds: the Sim(3) scale channel (spec Q2), executable memory (Q4), and
+opcodes for icosa32's six reserved cones.
 
 ## License
 

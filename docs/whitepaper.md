@@ -516,6 +516,10 @@ The implementation's numerical rules, in terms of the structures above:
 | Authoring section $K \to S^2$ composed with tracked $\tilde F$ | `versor/builder.py`, `versor/asm.py` |
 | Runs as discrete curves in $\mathbb{R}^3$; screw orbits | `versor/trace.py`, `versor/viz.py` |
 | $\mathbb{R}^{3m}$ program space, line probes | `versor/interp.py`, `examples/interpolate.py` |
+| Wall distances & evolutionary search (§8.1) | `versor/synth.py`, `examples/synthesize.py` |
+| Minsky embedding (§9), mechanized | `versor/minsky.py`, `tests/test_minsky.py` |
+| Antipodal line packing (open problem 6) | `tools/optimize_sphere26.py` → `Sphere26` |
+| JS semantics parity (golden files) | `docs/playground/`, `tools/make_golden.py` |
 | Theorem 5 / Prop. 4 / Prop. 6 / §8 numbers as tests | `tests/` (M1, M3, M6 suites) |
 | Every number in this paper | `docs/calcs.py` |
 
