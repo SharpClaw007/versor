@@ -11,3 +11,5 @@ tooling/vscode-versor/node_modules/
 tooling/vscode-versor/out/
 *.vsix
 /explanation.md
+/explanation.html
+/explanation.pdf
