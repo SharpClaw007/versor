@@ -1,11 +1,13 @@
 # Design: the three deferred extensions
 
-> Status: **EXEC (§2) implemented in v0.3a; Sim(3) scale (§1) implemented
-> in v0.3b** (scale range per call is [0.5, 2), closed on the left — frac 0
-> is representable). Implementation finding: frame-covariant recursion
-> needs orientation-specialized chain clones, so the fractal showpiece is
-> the pure-scale `zoom.vsr` rather than a turning Koch/Lévy curve (see
-> whitepaper §12.1). The extended ISA below remains planned. Ordering: EXEC (v0.3a) → Sim(3)
+> Status: **all three implemented** — EXEC in v0.3a, Sim(3) scale in v0.3b
+> (range per call [0.5, 2), closed on the left), the extended ISA in v0.4.
+> Deviations from plan: opcode keys became `triple | str` rather than a
+> full string-key refactor (less churn, same effect); the scale showpiece
+> is the pure-scale `zoom.vsr` because frame-covariant recursion needs
+> orientation-specialized chain clones (whitepaper §12.1); and the
+> sphere32 optimizer converges to the icosahedral configuration itself
+> (37.38°), suggesting icosa32 was already the optimal 16-line packing. Ordering: EXEC (v0.3a) → Sim(3)
 > scale (v0.3b) → extended ISA "Versor-32" (v0.4). Each lands with a spec
 > addendum here (the original `versor-design.md` stays as written), a
 > whitepaper section, JS-port parity + golden regeneration, and README

@@ -74,6 +74,10 @@ def arm_seg(local_seg, *, guard, to=None) -> Arm:
 def _op_vec(mnemonic: str, n: float,
             dirs: dict[str, np.ndarray]) -> np.ndarray:
     if mnemonic not in dirs:
+        if mnemonic in MNEMONIC_TO_TRIPLE:
+            raise LoadError(
+                f"{mnemonic} is a Versor-32 extended opcode with no cone "
+                "under this decoder — use decoder='icosa32' or 'sphere32'")
         raise LoadError(f"unknown mnemonic {mnemonic!r}")
     if n <= 1e-9:
         raise LoadError(f"{mnemonic}: operand magnitude must be positive, got {n}")
@@ -253,6 +257,14 @@ class ChainBuilder:
     def nop(self, n: float = 1.0):  return self.op("NOP", n)
     def fault(self, code: float = 1.0):  return self.op("FAULT", code)
 
+    # extended Versor-32 opcodes (icosa32/sphere32 only)
+    def inp(self, n: float = 1.0):  return self.op("INP", n)
+    def swap(self, idx: int):  return self.op("SWAP", _reg_n(idx))
+    def pusha(self, n: float = 1.0):  return self.op("PUSHA", n)
+    def popa(self, n: float = 1.0):  return self.op("POPA", n)
+    def mulr(self, idx: int):  return self.op("MULR", _reg_n(idx))
+    def loadp(self, n: float = 1.0):  return self.op("LOADP", n)
+
     # --- output ---
 
     def _finish(self) -> dict:
@@ -271,9 +283,12 @@ class ChainBuilder:
 
 
 def _mnemonic_dirs(decoder: str) -> dict[str, np.ndarray]:
-    """Cone-center authoring direction per mnemonic for the given decoder."""
-    by_triple = get_decoder(decoder).directions()
-    return {mn: by_triple[t] for mn, t in MNEMONIC_TO_TRIPLE.items()}
+    """Cone-center authoring direction per mnemonic for the given decoder.
+    Extended Versor-32 mnemonics only appear when the decoder assigns them
+    a cone (icosa32/sphere32); cubic26 stays base-26."""
+    by_key = get_decoder(decoder).directions()
+    return {mn: by_key[k] for mn, k in MNEMONIC_TO_TRIPLE.items()
+            if k in by_key}
 
 
 class ProgramBuilder:

@@ -58,7 +58,7 @@ export class VersorFault extends Error {
 const THRESHOLD = 0.35, DEAD_ZONE = 0.05, NN_MARGIN = 0.01;
 const PHI = (1 + Math.sqrt(5)) / 2;
 
-const key = (t) => t.join(",");
+const key = (t) => (typeof t === "string" ? t : t.join(","));
 
 class Cubic26 {
   constructor() { this.name = "cubic26"; }
@@ -107,7 +107,7 @@ class NearestNeighbor {
       throw new VersorFault("ReservedDirection",
         `direction is a reserved ${this.name} cone`);
     }
-    return t.slice();
+    return typeof t === "string" ? t : t.slice();
   }
   directions() {
     const out = {};
@@ -133,9 +133,9 @@ function icosaEntries() {
     e.push({ v: unit([s * PHI, s / PHI, 0]), triple: [s, 0, 0] });
     e.push({ v: unit([0, s * PHI, s / PHI]), triple: [0, s, 0] });
     e.push({ v: unit([s / PHI, 0, s * PHI]), triple: [0, 0, s] });
-    e.push({ v: unit([s * PHI, -s / PHI, 0]), triple: null });
-    e.push({ v: unit([0, s * PHI, -s / PHI]), triple: null });
-    e.push({ v: unit([-s / PHI, 0, s * PHI]), triple: null });
+    e.push({ v: unit([s * PHI, -s / PHI, 0]), triple: s > 0 ? "INP" : "SWAP" });
+    e.push({ v: unit([0, s * PHI, -s / PHI]), triple: s > 0 ? "PUSHA" : "POPA" });
+    e.push({ v: unit([-s / PHI, 0, s * PHI]), triple: s > 0 ? "MULR" : "LOADP" });
   }
   return e;
 }
@@ -166,10 +166,42 @@ function sphere26Entries() {
   return e;
 }
 
+// Versor-32 table from tools/optimize_sphere32.py (see versor/decode.py)
+const EXT_PARTNER = { INP: "SWAP", PUSHA: "POPA", MULR: "LOADP" };
+const SPHERE32_TABLE = [
+  [[+0.144541519227640, +0.880028878315152, -0.452390232598739], "PUSHA"],
+  [[-0.980834676069467, -0.182230567689861, +0.068959106861502], [-1, 0, 0]],
+  [[+0.880854070848405, -0.443264921404343, -0.166169537888849], "INP"],
+  [[-0.019885070504030, -0.985709983869711, -0.167273463737148], [0, -1, 0]],
+  [[+0.351317087629498, -0.584852352854011, +0.731111502645564], [0, -1, 1]],
+  [[-0.728894994596138, +0.089842846944058, +0.678704906204222], [-1, 0, 1]],
+  [[-0.844633354881627, +0.284324514537852, -0.453601219414391], [-1, 1, -1]],
+  [[-0.436988436068475, +0.724542485435285, +0.532990894426620], [-1, 1, 1]],
+  [[-0.212034862061437, -0.341420288051529, +0.915681933958183], "MULR"],
+  [[-0.676013506817563, -0.527392762459030, +0.514648047413039], [-1, -1, 1]],
+  [[+0.180790694289701, -0.298307937362607, -0.937191068760643], [0, 0, -1]],
+  [[-0.781407672422826, -0.350298099364822, -0.516423557809028], [-1, -1, -1]],
+  [[-0.508516760084874, +0.844740010813678, -0.166808329657992], [-1, 1, 0]],
+  [[-0.260282707989636, -0.685544396102580, -0.679913077454707], [0, -1, -1]],
+  [[-0.399306876852523, -0.026742125301063, -0.916427234881563], [-1, 0, -1]],
+  [[-0.619686155068403, -0.781639867525860, -0.070909708155471], [-1, -1, 0]],
+];
+
+function sphere32Entries() {
+  const e = [];
+  for (const [v, k] of SPHERE32_TABLE) {
+    const partner = typeof k === "string" ? EXT_PARTNER[k] : k.map((c) => -c);
+    e.push({ v: v.slice(), triple: typeof k === "string" ? k : k.slice() });
+    e.push({ v: vscale(v, -1), triple: partner });
+  }
+  return e;
+}
+
 export const DECODERS = {
   cubic26: () => new Cubic26(),
   icosa32: () => new NearestNeighbor("icosa32", icosaEntries()),
   sphere26: () => new NearestNeighbor("sphere26", sphere26Entries()),
+  sphere32: () => new NearestNeighbor("sphere32", sphere32Entries()),
 };
 
 const ALL_TRIPLES = [];
@@ -182,7 +214,7 @@ const regIndex = (n) => Math.floor(n) % 4;
 const localX = (m) => qrot(qconj(m.F), m.A)[0];
 const setLocalX = (m, s) => { m.A = qrot(m.F, [s, 0, 0]); };
 
-export const OPCODES = new Map(); // "sx,sy,sz" -> {mnemonic, klass, handler}
+export const OPCODES = new Map(); // "sx,sy,sz" | extended name -> op
 function op(triple, mnemonic, klass, handler) {
   OPCODES.set(key(triple), { mnemonic, klass, handler, triple });
 }
@@ -255,6 +287,25 @@ op([-1, -1, -1], "FAULT", "control", (m, n) => {
   throw new VersorFault("ExplicitFault", `FAULT opcode, operand ${n}`);
 });
 
+// extended Versor-32 opcodes (v0.4): string-keyed
+op("INP", "INP", "data", (m, n) => setLocalX(m, m.nextInput()));
+op("SWAP", "SWAP", "data", (m, n) => {
+  const idx = regIndex(n);
+  const t = m.A;
+  m.A = m.R[idx].slice();
+  m.R[idx] = t.slice();
+});
+op("PUSHA", "PUSHA", "data", (m) => { m.DS.push(m.A.slice()); });
+op("POPA", "POPA", "data", (m) => {
+  if (!m.DS.length) throw new VersorFault("StackUnderflow", "POPA on empty data stack");
+  m.A = m.DS.pop();
+});
+op("MULR", "MULR", "arithmetic", (m, n) => {
+  const s = qrot(qconj(m.F), m.R[regIndex(n)])[0];
+  m.A = vscale(m.A, s);
+});
+op("LOADP", "LOADP", "data", (m) => { m.A = m.P.slice(); });
+
 export const MNEMONIC_TO_TRIPLE = {};
 for (const { mnemonic, triple } of OPCODES.values()) MNEMONIC_TO_TRIPLE[mnemonic] = triple;
 
@@ -283,6 +334,15 @@ export class Machine {
     this.trace = opts.trace ? [] : null;
     this.execDepth = 0;
     this.pendingTrace = [];
+    this.DS = [];
+    this.IN = typeof opts.input === "string"
+      ? [...opts.input].map((c) => c.codePointAt(0))
+      : (opts.input || []).map(Number);
+  }
+
+  nextInput() {
+    if (!this.IN.length) this.fault("InputExhausted", "INP with an empty input buffer");
+    return this.IN.shift();
   }
 
   cellKey() {

@@ -1,4 +1,6 @@
 // Example programs for the playground, in .vasm.
+export const EXAMPLE_INPUTS = { square: "9" };
+
 export const EXAMPLES = {
   countdown: `; countdown: a loop is a cycle in the chain graph
 .name countdown
@@ -135,6 +137,47 @@ loop:   MOVA r0
         LOADI 10
         OUTC
         HALT
+`,
+
+  square: `; Versor-32 extended opcodes (v0.4): INP reads the input box,
+; MULR multiplies by a register's frame-local scalar
+.name square
+.decoder icosa32
+
+.chain entry
+        INP              ; A = next input scalar
+        MOVR r1
+        MULR r1          ; A *= A
+        OUT
+        HALT
+`,
+
+  zoom: `; Sim(3) scale channel (v0.3b): CALL's second argument scales the
+; callee; RET restores it — self-similar recursion from the call stack
+.name zoom
+
+.chain entry
+        CALL l1
+        HALT
+.chain l1
+        NOP 2
+        OP MOVR 2.0
+        CALL l2 0.55
+        NOP 2
+.chain l2
+        NOP 2
+        OP MOVR 2.0
+        CALL l3 0.55
+        NOP 2
+.chain l3
+        NOP 2
+        OP MOVR 2.0
+        CALL l4 0.55
+        NOP 2
+.chain l4
+        NOP 2
+        OP MOVR 2.0
+        NOP 2
 `,
 
   memory: `; memory is space: store at a cell, walk away, come back by a

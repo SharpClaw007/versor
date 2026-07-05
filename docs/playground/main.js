@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import { AsmError, assemble } from "./asm.js";
-import { EXAMPLES } from "./examples.js";
+import { EXAMPLE_INPUTS, EXAMPLES } from "./examples.js";
 import { Machine, VersorFault, qrot } from "./versor.js";
 
 const CLASS_COLORS = {
@@ -92,7 +92,13 @@ function compileAndRun() {
   // assemble() emits vertices keyed by id already; adapt to Machine's shape
   const chains = [];
   for (const c of prog.chains) chains[c.id] = c;
-  const m = new Machine({ ...prog, chains }, { trace: true, stepBudget: 60000 });
+  const raw = $("stdin").value.trim();
+  const tokens = raw ? raw.split(",").map((t) => t.trim()) : [];
+  const input = tokens.length && tokens.every((t) => t !== "" && Number.isFinite(Number(t)))
+    ? tokens.map(Number)
+    : raw;  // non-numeric input feeds INP as char codes
+  const m = new Machine({ ...prog, chains },
+    { trace: true, stepBudget: 60000, input });
   try {
     m.run();
   } catch (e) {
@@ -196,6 +202,7 @@ for (const name of Object.keys(EXAMPLES)) {
 }
 exampleSel.addEventListener("change", () => {
   $("editor").value = EXAMPLES[exampleSel.value];
+  $("stdin").value = EXAMPLE_INPUTS[exampleSel.value] || "";
   playing = false;
   compileAndRun();
 });

@@ -65,7 +65,7 @@ class Machine:
                  step_budget: int = DEFAULT_STEP_BUDGET,
                  max_call_depth: int = DEFAULT_MAX_CALL_DEPTH,
                  F0: Quat | None = None, P0=None, S0: float = 1.0,
-                 trace: Trace | None = None):
+                 input=None, trace: Trace | None = None):
         self.program = program
         self.decoder = get_decoder(decoder or program.decoder)
         self.step_budget = step_budget
@@ -79,9 +79,11 @@ class Machine:
         self.A = np.zeros(3)
         self.R = [np.zeros(3) for _ in range(4)]
         self.M: dict[tuple[int, int, int], np.ndarray] = {}
-        self.CS: list[tuple[int, int, Quat, np.ndarray]] = []
-        self.AUX: list[tuple[Quat, np.ndarray]] = []
+        self.CS: list = []
+        self.AUX: list = []
+        self.DS: list[np.ndarray] = []  # data stack (PUSHA/POPA, v0.4)
         self.OUT: list = []
+        self.IN: list[float] = self._coerce_input(input)
 
         self.chain = 0
         self.vertex = program.chains[0].entry
@@ -93,6 +95,20 @@ class Machine:
         self._pending_trace: list = []  # records from EXEC'd instructions
 
     # --- helpers used by opcode handlers ---
+
+    @staticmethod
+    def _coerce_input(value) -> list[float]:
+        """Input buffer for INP: a string becomes its char codes."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [float(ord(c)) for c in value]
+        return [float(v) for v in value]
+
+    def next_input(self) -> float:
+        if not self.IN:
+            self.fault("InputExhausted", "INP with an empty input buffer")
+        return self.IN.pop(0)
 
     def cell(self) -> tuple[int, int, int]:
         return tuple(int(math.floor(c / CELL_SIZE)) for c in self.P)

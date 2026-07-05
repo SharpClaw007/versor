@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np  # noqa: E402
 
-from versor.decode import PHI, Cubic26, Icosa32, Sphere26  # noqa: E402
+from versor.decode import PHI, Cubic26, Icosa32, Sphere26, Sphere32  # noqa: E402
 from versor.errors import VersorFault  # noqa: E402
 
 
@@ -65,7 +65,7 @@ def icosa_angles():
     print(f"face assignment angle:  cos = phi/sqrt(3) "
           f"= {f_cos:.6f} -> {math.degrees(math.acos(f_cos)):.2f} deg")
     # minimum angular gap within each nearest-neighbor direction set
-    for dec in (Icosa32(), Sphere26()):
+    for dec in (Icosa32(), Sphere26(), Sphere32()):
         m = dec._matrix
         dots = np.clip(m @ m.T, -1, 1)
         np.fill_diagonal(dots, -1)
@@ -99,6 +99,7 @@ def main():
     cubic26_partition(n)
     nn_partition(Icosa32(), n // 4)
     nn_partition(Sphere26(), n // 4)
+    nn_partition(Sphere32(), n // 4)
     icosa_angles()
     interpolation_bands()
 

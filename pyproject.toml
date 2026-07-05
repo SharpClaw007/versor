@@ -1,6 +1,6 @@
 [project]
 name = "versor"
-version = "0.2.0"
+version = "0.4.0"
 description = "A language where the program is the path: instructions are vectors, programs are polylines through 3D space."
 readme = "README.md"
 license = {text = "MIT"}

@@ -49,11 +49,18 @@ screw motions, and the geometry of program space — is worked out in the
 
 ## Features
 
-- **Vector ISA** — direction quantized against the frame picks one of 26 opcodes;
-  magnitude is the immediate operand. Three pluggable decoders: `cubic26`
-  (component thresholds), `icosa32` (nearest-neighbor over the 32 icosahedral
-  directions), and `sphere26` (optimized antipodal packing — 92.5% of the
-  sphere decodes vs cubic's 72.2%).
+- **Vector ISA** — direction quantized against the frame picks the opcode;
+  magnitude is the immediate operand. Four pluggable decoders: `cubic26`
+  (26 opcodes, component thresholds), `icosa32` and `sphere32` (the full
+  **Versor-32** ISA: + INP/SWAP, PUSHA/POPA, MULR/LOADP on the extra
+  icosahedral cones), and `sphere26` (optimized base-26 packing). The
+  nearest-neighbor decoders put ~91–92% of the sphere in play vs cubic's 72%.
+- **Executable memory** — `EXEC` (LOAD with n ≥ 2) runs the arrival cell's
+  stored vector under the live frame, movement included: chained EXECs walk
+  code laid down in space by STORE. Self-modifying programs, spec Q4.
+- **Sim(3) scale channel** — `CALL chain 0.55` scales the callee's whole
+  geometry; RET restores it. Self-similar recursion from the call stack
+  (`zoom.vsr`), spec Q2.
 - **Orientation frame** — a unit quaternion the program itself rotates with
   **ROTF/ROTG/ROTH**; non-commutativity of SO(3) is a feature, not a bug.
 - **Functions are shapes** — `CALL` executes a stored chain under the caller's
@@ -192,6 +199,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 | `python -m versor run FILE.vsr --trace out.png`| Also render the executed path            |
 | `python -m versor run FILE.vsr --animate out.gif` | Execution GIF (cursor, frame triad, HUD); `--fps`, `--spin` |
 | `python -m versor run FILE.vsr --decoder icosa32` | Override the program's decoder        |
+| `python -m versor run FILE.vsr --input 6,7`    | Feed scalars to `INP` (`--input-text` for chars) |
 | `python -m versor asm FILE.vasm [-o out.vsr]`  | Assemble Versor assembly to `.vsr`       |
 | `python -m versor vhl FILE.vhl [-o out.vsr]`   | Compile VHL to `.vsr` (run also takes `.vhl`) |
 | `python -m versor export FILE --gcode/--obj/--stl` | Toolpath / mesh export of a run      |
@@ -354,10 +362,10 @@ Minsky reduction (Turing completeness, spec Q1) · robustness maps +
 evolutionary synthesis · G-code/OBJ/STL export ·
 [browser playground](https://sharpclaw007.github.io/versor/playground/)
 (JS port, parity-tested in CI) · execution GIFs · the
-[whitepaper](docs/whitepaper.md). Next up, designed but not yet built —
-the Sim(3) scale channel (spec Q2), executable memory (Q4), and opcodes
-for icosa32's six reserved cones: see
-[`docs/design-v03.md`](docs/design-v03.md).
+[whitepaper](docs/whitepaper.md) · and the three once-deferred extensions,
+now shipped: executable memory (`EXEC`, spec Q4), the Sim(3) scale channel
+(spec Q2), and the Versor-32 extended ISA (INP/SWAP, PUSHA/POPA,
+MULR/LOADP) — design history in [`docs/design-v03.md`](docs/design-v03.md).
 
 ## License
 

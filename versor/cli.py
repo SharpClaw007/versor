@@ -41,7 +41,13 @@ def cmd_run(args) -> int:
         print(f"warning: {w}", file=sys.stderr)
 
     trace = Trace() if (args.trace or args.animate) else None
-    m = Machine(prog, step_budget=args.steps, trace=trace, decoder=args.decoder)
+    inp = None
+    if args.input is not None:
+        inp = [float(v) for v in args.input.split(",") if v.strip()]
+    elif args.input_text is not None:
+        inp = args.input_text
+    m = Machine(prog, step_budget=args.steps, trace=trace,
+                decoder=args.decoder, input=inp)
     code = 0
     try:
         res = m.run()
@@ -159,6 +165,10 @@ def main(argv=None) -> int:
                     help="step budget (default 1e6)")
     pr.add_argument("--decoder", choices=sorted(DECODERS), default=None,
                     help="override the program's decoder")
+    pr.add_argument("--input", default=None,
+                    help="comma-separated scalars for INP")
+    pr.add_argument("--input-text", default=None,
+                    help="string whose char codes feed INP")
     pr.set_defaults(fn=cmd_run)
 
     pl = sub.add_parser("lint", help="validate a .vsr/.vasm program")

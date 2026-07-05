@@ -4,8 +4,8 @@ from versor import Machine
 from versor.vhl import CompileError, compile_vhl
 
 
-def run(src):
-    return Machine(compile_vhl(src).build()).run().out
+def run(src, **kw):
+    return Machine(compile_vhl(src).build(), **kw).run().out
 
 
 class TestExpressions:
@@ -85,10 +85,39 @@ print acc
         assert run(src) == pytest.approx([12.0])
 
 
+class TestVersor32:
+    """VHL v2: input() and var*var auto-select the icosa32 dialect."""
+
+    def test_plain_programs_stay_cubic26(self):
+        assert compile_vhl("print 1").build().decoder == "cubic26"
+
+    def test_var_times_var(self):
+        src = "let x = 6\nlet y = 7\nprint x * y"
+        prog = compile_vhl(src).build()
+        assert prog.decoder == "icosa32"
+        assert Machine(prog).run().out == pytest.approx([42.0])
+
+    def test_input(self):
+        src = "let a = input()\nlet b = input()\nprint a + b"
+        assert run(src, input=[30, 12]) == pytest.approx([42.0])
+
+    def test_input_in_expression(self):
+        assert run("print input() * 3", input=[5]) == pytest.approx([15.0])
+
+    def test_square_via_product(self):
+        src = "let x = input()\nprint x * x"
+        assert run(src, input=[9]) == pytest.approx([81.0])
+
+    def test_input_exhausted_faults(self):
+        from versor import VersorFault
+        with pytest.raises(VersorFault) as e:
+            run("print input()", input=[])
+        assert e.value.kind == "InputExhausted"
+
+
 class TestErrors:
     @pytest.mark.parametrize("src,match", [
         ("print y", "undefined variable"),
-        ("let x = 1\nlet y = 2\nprint x * y", "variable [*] variable"),
         ("frobnicate 3", "unknown statement"),
         ("let 3 = 4", "expected: let"),
         ("repeat 3", "repeat expr"),

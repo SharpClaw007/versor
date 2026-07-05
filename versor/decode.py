@@ -1,13 +1,17 @@
 """Direction quantization: unit vector -> opcode sign triple.
 
-Three decoders ship:
+Four decoders ship:
 
-- ``cubic26`` (v0.1 default): snap components to {-1, 0, +1} at threshold 0.35.
+- ``cubic26`` (v0.1 default): snap components to {-1, 0, +1} at threshold
+  0.35. Base-26 ISA only.
 - ``icosa32`` (M6): nearest-neighbor over the 32 directions of icosahedral
-  symmetry (12 icosahedron vertices + 20 face normals).
-- ``sphere26``: nearest-neighbor over an optimized antipodal packing of all
-  26 opcode directions (no reserved cones, near-uniform margins; generated
-  by tools/optimize_sphere26.py).
+  symmetry (12 icosahedron vertices + 20 face normals). Since v0.4 the six
+  formerly reserved cones carry the extended Versor-32 opcodes
+  (INP/SWAP, PUSHA/POPA, MULR/LOADP), keyed by name rather than triple.
+- ``sphere26``: optimized antipodal packing of the 26 base directions
+  (tools/optimize_sphere26.py).
+- ``sphere32``: optimized antipodal packing of the full 32-key Versor-32
+  ISA (tools/optimize_sphere32.py).
 
 Icosahedral symmetry has orbit sizes 12/20/30 — there is no 26-direction
 icosahedral set, so icosa32 keeps the 26-opcode ISA by *assigning* each opcode
@@ -106,7 +110,9 @@ def _icosa_assignment() -> list[tuple[np.ndarray, tuple[int, int, int] | None]]:
         entries.append((np.array([sx * PHI, 0, sz]), (sx, 0, sz)))
 
     # 12 axis-heavy dodecahedron vertices: 6 carry the face opcodes
-    # (minor-component sign matches the major one), 6 are reserved.
+    # (minor-component sign matches the major one), 6 carry the extended
+    # "Versor-32" opcodes (v0.4) on the mirror twins — three antipodal
+    # pairs: INP/SWAP, PUSHA/POPA, MULR/LOADP.
     # These are cyclic permutations of (phi, 1/phi, 0) — the TRUE dual of the
     # icosahedron orientation above (each is the centroid of three mutually
     # adjacent icosahedron vertices). The mirrored family (phi, 0, 1/phi)
@@ -117,16 +123,22 @@ def _icosa_assignment() -> list[tuple[np.ndarray, tuple[int, int, int] | None]]:
         entries.append((np.array([s * PHI, s / PHI, 0]), (s, 0, 0)))
         entries.append((np.array([0, s * PHI, s / PHI]), (0, s, 0)))
         entries.append((np.array([s / PHI, 0, s * PHI]), (0, 0, s)))
-        entries.append((np.array([s * PHI, -s / PHI, 0]), None))
-        entries.append((np.array([0, s * PHI, -s / PHI]), None))
-        entries.append((np.array([-s / PHI, 0, s * PHI]), None))
+        entries.append((np.array([s * PHI, -s / PHI, 0]),
+                        "INP" if s > 0 else "SWAP"))
+        entries.append((np.array([0, s * PHI, -s / PHI]),
+                        "PUSHA" if s > 0 else "POPA"))
+        entries.append((np.array([-s / PHI, 0, s * PHI]),
+                        "MULR" if s > 0 else "LOADP"))
 
     return [(v / np.linalg.norm(v), triple) for v, triple in entries]
 
 
 class _NearestNeighbor:
     """Nearest-neighbor decoding over a fixed direction set with a relative
-    cosine-gap ambiguity margin. Subclasses set name and provide entries."""
+    cosine-gap ambiguity margin. Subclasses set name and provide entries.
+
+    Opcode keys are sign triples for the base-26 ISA and short strings for
+    the extended "Versor-32" opcodes (v0.4); None marks a reserved cone."""
 
     name = "abstract"
     margin = ICOSA_MARGIN
@@ -135,7 +147,7 @@ class _NearestNeighbor:
         self._matrix = np.array([v for v, _ in entries])
         self._triples = [t for _, t in entries]
 
-    def decode(self, unit_v: np.ndarray) -> tuple[int, int, int]:
+    def decode(self, unit_v: np.ndarray):
         dots = self._matrix @ np.asarray(unit_v, dtype=float)
         order = np.argsort(dots)
         best, second = int(order[-1]), int(order[-2])
@@ -154,7 +166,7 @@ class _NearestNeighbor:
             )
         return triple
 
-    def directions(self) -> dict[tuple[int, int, int], np.ndarray]:
+    def directions(self) -> dict:
         return {t: v.copy() for v, t in zip(self._matrix, self._triples)
                 if t is not None}
 
@@ -204,7 +216,49 @@ class Sphere26(_NearestNeighbor):
         super().__init__(entries)
 
 
-DECODERS = {"cubic26": Cubic26, "icosa32": Icosa32, "sphere26": Sphere26}
+# Versor-32 antipodal 16-line packing (tools/optimize_sphere32.py; seeded
+# and random starts converge to 37.38 deg minimum separation). String keys
+# are extended opcodes; each line's antipode carries the partner opcode
+# (or the negated triple).
+_EXT_PARTNER = {"INP": "SWAP", "PUSHA": "POPA", "MULR": "LOADP"}
+_SPHERE32_TABLE = [
+    ((+0.144541519227640, +0.880028878315152, -0.452390232598739), "PUSHA"),
+    ((-0.980834676069467, -0.182230567689861, +0.068959106861502), (-1, 0, 0)),
+    ((+0.880854070848405, -0.443264921404343, -0.166169537888849), "INP"),
+    ((-0.019885070504030, -0.985709983869711, -0.167273463737148), (0, -1, 0)),
+    ((+0.351317087629498, -0.584852352854011, +0.731111502645564), (0, -1, 1)),
+    ((-0.728894994596138, +0.089842846944058, +0.678704906204222), (-1, 0, 1)),
+    ((-0.844633354881627, +0.284324514537852, -0.453601219414391), (-1, 1, -1)),
+    ((-0.436988436068475, +0.724542485435285, +0.532990894426620), (-1, 1, 1)),
+    ((-0.212034862061437, -0.341420288051529, +0.915681933958183), "MULR"),
+    ((-0.676013506817563, -0.527392762459030, +0.514648047413039), (-1, -1, 1)),
+    ((+0.180790694289701, -0.298307937362607, -0.937191068760643), (0, 0, -1)),
+    ((-0.781407672422826, -0.350298099364822, -0.516423557809028), (-1, -1, -1)),
+    ((-0.508516760084874, +0.844740010813678, -0.166808329657992), (-1, 1, 0)),
+    ((-0.260282707989636, -0.685544396102580, -0.679913077454707), (0, -1, -1)),
+    ((-0.399306876852523, -0.026742125301063, -0.916427234881563), (-1, 0, -1)),
+    ((-0.619686155068403, -0.781639867525860, -0.070909708155471), (-1, -1, 0)),
+]
+
+
+class Sphere32(_NearestNeighbor):
+    """Optimized antipodal packing carrying the full Versor-32 ISA."""
+
+    name = "sphere32"
+
+    def __init__(self):
+        entries = []
+        for v, k in _SPHERE32_TABLE:
+            vec = np.array(v)
+            partner = (_EXT_PARTNER[k] if isinstance(k, str)
+                       else tuple(-c for c in k))
+            entries.append((vec, k))
+            entries.append((-vec, partner))
+        super().__init__(entries)
+
+
+DECODERS = {"cubic26": Cubic26, "icosa32": Icosa32, "sphere26": Sphere26,
+            "sphere32": Sphere32}
 
 
 def get_decoder(name: str):

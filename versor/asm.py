@@ -52,12 +52,14 @@ GUARDS = {
     "z": (0, 0, 1), "+z": (0, 0, 1), "-z": (0, 0, -1),
 }
 
-REG_OPS = {"MOVR", "MOVA", "ADD", "SUB", "DOT", "CROSS", "PROJ", "REJ"}
+REG_OPS = {"MOVR", "MOVA", "ADD", "SUB", "DOT", "CROSS", "PROJ", "REJ",
+           "SWAP", "MULR"}
 FLOAT_OPS = {"LOADI", "SCALE"}
 ANGLE_OPS = {"ROTF", "ROTG", "ROTH"}
 DEFAULT_N = {"HALT": 1.0, "NOP": 1.0, "RET": 1.0, "JMPZ": 1.0, "JMPP": 1.0,
              "PUSHF": 1.0, "POPF": 1.0, "NORM": 1.0, "STORE": 1.0,
-             "LOAD": 1.0, "FAULT": 1.0, "OUT": 1.0, "OUTC": 2.0, "EXEC": 2.0}
+             "LOAD": 1.0, "FAULT": 1.0, "OUT": 1.0, "OUTC": 2.0, "EXEC": 2.0,
+             "INP": 1.0, "PUSHA": 1.0, "POPA": 1.0, "LOADP": 1.0}
 PSEUDO = {"OUTC": "OUT", "EXEC": "LOAD"}  # magnitude-band aliases
 
 _LABEL_RE = re.compile(r"^([A-Za-z_]\w*):\s*(.*)$")

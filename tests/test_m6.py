@@ -22,11 +22,15 @@ def unit(v):
 
 
 class TestIcosa32:
-    def test_has_26_assigned_and_6_reserved_directions(self):
+    def test_has_26_base_and_6_extended_directions(self):
         dec = Icosa32()
-        assert len(dec.directions()) == 26
+        dirs = dec.directions()
+        assert len(dirs) == 32
         assert len(dec._triples) == 32
-        assert sum(1 for t in dec._triples if t is None) == 6
+        base = [t for t in dec._triples if isinstance(t, tuple)]
+        ext = [t for t in dec._triples if isinstance(t, str)]
+        assert len(base) == 26
+        assert sorted(ext) == ["INP", "LOADP", "MULR", "POPA", "PUSHA", "SWAP"]
 
     def test_assigned_directions_roundtrip(self):
         dec = Icosa32()
@@ -48,12 +52,14 @@ class TestIcosa32:
                 icosa.decode(unit(triple))
             assert e.value.kind == "AmbiguousDirection"
 
-    def test_reserved_directions_fault(self):
+    def test_formerly_reserved_directions_carry_extended_opcodes(self):
         icosa = Icosa32()
-        for v in [(PHI, -1 / PHI, 0), (0, PHI, -1 / PHI), (-1 / PHI, 0, PHI)]:
-            with pytest.raises(VersorFault) as e:
-                icosa.decode(unit(v))
-            assert e.value.kind == "ReservedDirection"
+        assert icosa.decode(unit((PHI, -1 / PHI, 0))) == "INP"
+        assert icosa.decode(unit((-PHI, 1 / PHI, 0))) == "SWAP"
+        assert icosa.decode(unit((0, PHI, -1 / PHI))) == "PUSHA"
+        assert icosa.decode(unit((0, -PHI, 1 / PHI))) == "POPA"
+        assert icosa.decode(unit((-1 / PHI, 0, PHI))) == "MULR"
+        assert icosa.decode(unit((1 / PHI, 0, -PHI))) == "LOADP"
 
     def test_direction_set_is_a_true_dual_pair(self):
         # regression for the mixed-orientation bug: the 20 dodecahedral

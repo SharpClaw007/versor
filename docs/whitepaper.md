@@ -184,8 +184,9 @@ The implemented `icosa32` therefore uses the smallest icosahedral direction
 set that can host the ISA: the $12 + 20 = 32$ directions given by the
 icosahedron's vertices and face normals, decoded by nearest neighbor
 (equivalently, the spherical Voronoi partition), with 26 cones carrying the
-existing opcodes and 6 left **reserved** (decoding into one is a fault, held
-for a future ISA extension). The assignment uses golden-ratio arithmetic,
+existing opcodes and 6 originally left reserved — since v0.4 those six
+carry the **extended Versor-32 opcodes** (string-keyed: the antipodal pairs
+INP/SWAP, PUSHA/POPA, MULR/LOADP), so all 32 cones decode. The assignment uses golden-ratio arithmetic,
 $\varphi = \tfrac{1+\sqrt5}{2}$, $\varphi^2 = \varphi + 1$:
 
 - **Corners, exact.** The face normals of the icosahedron are the vertices
@@ -201,7 +202,8 @@ $\varphi = \tfrac{1+\sqrt5}{2}$, $\varphi^2 = \varphi + 1$:
   $(\varphi, \varphi^{-1}, 0)$ have norm exactly $\sqrt3$, and
   $\cos\theta = \varphi/\sqrt3 = 0.9342$ against $+\hat x$. Each axis has
   *two* such candidates, $(\varphi, \pm\varphi^{-1}, 0)$; one is assigned
-  (minor-component sign matching the major), its mirror is reserved.
+  (minor-component sign matching the major), its mirror carries an
+  extended opcode (v0.4).
 
 A caution that cost this project a bug: the 20 dodecahedral directions must
 be the face normals *of the icosahedron orientation actually used* — the
@@ -233,9 +235,9 @@ $\theta$ the gap grows at rate $2\sin(\theta/2)$ per radian of motion, so
 with the set's minimum separation of 37.38° (the uniform
 vertex-to-adjacent-face angle,
 $\arccos(\varphi^2 / (\sqrt3\sqrt{1+\varphi^2}))$) the fault shell is about
-0.9° on each side of every wall. Measured partition: 73.6 % assigned,
-17.7 % reserved, 8.8 % dead — less than a third of cubic-26's forbidden
-area, at the cost of six unusable cones.
+0.9° on each side of every wall. Measured partition: 91.3 % of the sphere
+decodes (8.7 % dead) — less than a third of cubic-26's forbidden area,
+with, since v0.4, no unusable cones at all.
 
 ## 4. Semantics: the step map and frame covariance
 
@@ -553,8 +555,16 @@ The implementation's numerical rules, in terms of the structures above:
    chains, tested end to end. The remaining formal gap is a machine-checked
    proof that the gadget semantics match (e.g. in Lean), plus lifting the
    interpreter's finite step budget into the statement.
-5. **The six reserved cones** of `icosa32` await opcodes; candidates should
-   respect the antipodal symmetry of the current assignment.
+5. ~~The six reserved cones~~ — filled in v0.4 ("Versor-32"): the three
+   antipodal pairs carry INP/SWAP, PUSHA/POPA, and MULR/LOADP (input,
+   accumulator-register swap, a data stack, register-scalar multiply, and
+   read-only position introspection — LOADP's teleport dual stays rejected
+   because writing $P$ would break Proposition 6). Opcode keys became
+   `triple | string` to accommodate them, and `sphere32` extends the
+   optimized-packing decoder to the full 32-key ISA. Amusingly, the
+   16-line optimizer converges to a 37.38° minimum separation — the
+   icosahedral configuration itself appears to be the optimal antipodal
+   16-line packing, so `icosa32` was already extremal.
 6. ~~Equal-area decoding~~ — shipped as `sphere26`: an antipodal 13-line
    packing found by annealed Riesz repulsion (`tools/optimize_sphere26.py`;
    the cubic seed and every random restart converge to the same 38.17°

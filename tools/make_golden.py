@@ -18,9 +18,9 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "docs", "playground",
 EXAMPLES = os.path.join(os.path.dirname(__file__), "..", "examples")
 
 
-def record(name, prog, vasm=None):
+def record(name, prog, vasm=None, input=None):
     trace = Trace()
-    m = Machine(prog, trace=trace)
+    m = Machine(prog, trace=trace, input=input)
     res = m.run()
     entry = {
         "name": name,
@@ -35,6 +35,8 @@ def record(name, prog, vasm=None):
     }
     if vasm is not None:
         entry["vasm"] = vasm
+    if input is not None:
+        entry["input"] = input
     return entry
 
 
@@ -56,6 +58,15 @@ def main():
     c = b.chain()
     c.loadi(9).store(0.5).op("MOVR", 2.0).exec_cell(2.5).out().halt()
     entries.append(record("exec-trampoline", b.build()))
+
+    b = ProgramBuilder("v32-ops", decoder="icosa32")
+    c = b.chain()
+    c.inp().movr(1).inp().mulr(1).pusha().loadi(5).swap(1) \
+     .popa().out().loadp().out().halt()
+    entries.append(record("v32-ops", b.build(), input=[6.0, 7.0]))
+
+    entries.append(record("countdown-sphere32",
+                          countdown(4, decoder="sphere32").build()))
 
     scaled_src = """
 .chain main

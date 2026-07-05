@@ -231,12 +231,56 @@ OPCODES: dict[tuple[int, int, int], Op] = {
     (-1, -1, -1): Op("FAULT", "control", _fault),
 }
 
-MNEMONIC_TO_TRIPLE: dict[str, tuple[int, int, int]] = {
-    op.mnemonic: triple for triple, op in OPCODES.items()
-}
 
-# canonical cubic26 unit direction for each mnemonic (for the builder)
+# --- extended "Versor-32" opcodes (v0.4): string-keyed, only reachable
+# through decoders that assign directions to them (icosa32, sphere32) ---
+
+def _inp(m, n):
+    _set_local_x(m, m.next_input())
+
+
+def _swap(m, n):
+    idx = reg_index(n)
+    m.A, m.R[idx] = m.R[idx].copy(), m.A.copy()
+
+
+def _pusha(m, n):
+    m.DS.append(m.A.copy())
+
+
+def _popa(m, n):
+    if not m.DS:
+        raise VersorFault("StackUnderflow", "POPA on empty data stack")
+    m.A = m.DS.pop()
+
+
+def _mulr(m, n):
+    s = float(m.F.conj().rotate(m.R[reg_index(n)])[0])
+    m.A = m.A * s
+
+
+def _loadp(m, n):
+    m.A = m.P.copy()
+
+
+OPCODES.update({
+    "INP": Op("INP", "data", _inp),
+    "SWAP": Op("SWAP", "data", _swap),
+    "PUSHA": Op("PUSHA", "data", _pusha),
+    "POPA": Op("POPA", "data", _popa),
+    "MULR": Op("MULR", "arithmetic", _mulr),
+    "LOADP": Op("LOADP", "data", _loadp),
+})
+
+# mnemonic -> opcode key (a sign triple for the base 26, the mnemonic
+# itself for the extended Versor-32 six)
+MNEMONIC_TO_TRIPLE: dict = {
+    op.mnemonic: k for k, op in OPCODES.items()
+}
+MNEMONIC_TO_KEY = MNEMONIC_TO_TRIPLE  # clearer alias
+
+# canonical cubic26 unit direction per base mnemonic (for the builder)
 DIRECTIONS: dict[str, np.ndarray] = {
-    op.mnemonic: np.array(triple, dtype=float) / np.linalg.norm(triple)
-    for triple, op in OPCODES.items()
+    op.mnemonic: np.array(k, dtype=float) / np.linalg.norm(k)
+    for k, op in OPCODES.items() if isinstance(k, tuple)
 }

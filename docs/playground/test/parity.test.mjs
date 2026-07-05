@@ -14,8 +14,8 @@ const golden = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "golden.json")),
 );
 
-function check(program, expected) {
-  const m = new Machine(program, { trace: true });
+function check(program, expected, input) {
+  const m = new Machine(program, { trace: true, input });
   const res = m.run();
   assert.equal(res.haltReason, expected.haltReason);
   assert.equal(res.steps, expected.steps);
@@ -37,11 +37,11 @@ function check(program, expected) {
 
 for (const entry of golden) {
   test(`golden: ${entry.name}`, () => {
-    check(fromDict(entry.program), entry.expected);
+    check(fromDict(entry.program), entry.expected, entry.input);
   });
   if (entry.vasm) {
     test(`golden (assembled in JS): ${entry.name}`, () => {
-      check(fromDict(toPlain(assemble(entry.vasm))), entry.expected);
+      check(fromDict(toPlain(assemble(entry.vasm))), entry.expected, entry.input);
     });
   }
 }

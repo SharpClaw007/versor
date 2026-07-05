@@ -12,13 +12,14 @@ const GUARDS = {
   y: [0, 1, 0], "+y": [0, 1, 0], "-y": [0, -1, 0],
   z: [0, 0, 1], "+z": [0, 0, 1], "-z": [0, 0, -1],
 };
-const REG_OPS = new Set(["MOVR", "MOVA", "ADD", "SUB", "DOT", "CROSS", "PROJ", "REJ"]);
+const REG_OPS = new Set(["MOVR", "MOVA", "ADD", "SUB", "DOT", "CROSS", "PROJ", "REJ", "SWAP", "MULR"]);
 const FLOAT_OPS = new Set(["LOADI", "SCALE"]);
 const ANGLE_OPS = new Set(["ROTF", "ROTG", "ROTH"]);
 const ROT_AXES = { ROTF: [1, 0, 0], ROTG: [0, 1, 0], ROTH: [0, 0, 1] };
 const DEFAULT_N = {
   HALT: 1, NOP: 1, RET: 1, JMPZ: 1, JMPP: 1, PUSHF: 1, POPF: 1,
   NORM: 1, STORE: 1, LOAD: 1, FAULT: 1, OUT: 1, OUTC: 2, EXEC: 2,
+  INP: 1, PUSHA: 1, POPA: 1, LOADP: 1,
 };
 const PSEUDO = { OUTC: "OUT", EXEC: "LOAD" };
 const LABEL_RE = /^([A-Za-z_]\w*):\s*(.*)$/;
@@ -161,8 +162,15 @@ class ChainBuilder {
     return null;
   }
   opVec(mnemonic, n, ln) {
-    const d = this.dirs[MNEMONIC_TO_TRIPLE[mnemonic]?.join(",")];
-    if (!d) throw err(ln, `unknown mnemonic '${mnemonic}'`);
+    const k = MNEMONIC_TO_TRIPLE[mnemonic];
+    const d = k === undefined ? undefined
+      : this.dirs[typeof k === "string" ? k : k.join(",")];
+    if (!d) {
+      if (k !== undefined) {
+        throw err(ln, `${mnemonic} is a Versor-32 extended opcode with no cone under this decoder — use .decoder icosa32 or sphere32`);
+      }
+      throw err(ln, `unknown mnemonic '${mnemonic}'`);
+    }
     if (n <= 1e-9) throw err(ln, `${mnemonic}: operand magnitude must be positive, got ${n}`);
     return vscale(d, n);
   }

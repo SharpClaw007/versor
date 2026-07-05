@@ -110,9 +110,9 @@ class _ExprParser:
             elif node[0] == "num":
                 node = ("mul", rhs, node[1])
             else:
-                raise _err(self.ln,
-                           "variable * variable is not in VHL v1 — one side "
-                           "of '*' must be constant (use repeat for products)")
+                # variable * variable: MULR, available in the Versor-32
+                # dialects — the compiler auto-selects icosa32 when used
+                node = ("mulvar", node, rhs)
         return node
 
     def factor(self):
@@ -131,14 +131,19 @@ class _ExprParser:
             return ("neg", node)
         if re.fullmatch(NUM_RE, tok):
             return ("num", float(tok))
+        if tok == "input" and self.peek() == "(":
+            self.take()
+            if self.take() != ")":
+                raise _err(self.ln, "input takes no arguments: input()")
+            return ("inp",)
         if re.fullmatch(r"[A-Za-z_]\w*", tok) and tok not in KEYWORDS:
             return ("var", tok)
         raise _err(self.ln, f"unexpected token {tok!r} in expression")
 
 
 class _Compiler:
-    def __init__(self):
-        self.b = ProgramBuilder("vhl")
+    def __init__(self, decoder: str = "cubic26"):
+        self.b = ProgramBuilder("vhl", decoder=decoder)
         self.c = self.b.chain("compiled from VHL")
         self.vars: dict[str, int] = {}
         self.free = [3, 2, 1]
@@ -223,6 +228,23 @@ class _Compiler:
         elif kind == "neg":
             self.eval(node[1], ln)
             self.negate_a(ln)
+        elif kind == "inp":
+            self.c.inp()
+        elif kind == "mulvar":
+            a, bnode = node[1], node[2]
+            if bnode[0] == "var" and bnode[1] in self.vars:
+                self.eval(a, ln)
+                self.c.mulr(self.vars[bnode[1]])
+            elif a[0] == "var" and a[1] in self.vars:
+                self.eval(bnode, ln)
+                self.c.mulr(self.vars[a[1]])
+            else:
+                t = self.alloc("mul-temp", ln)
+                self.eval(bnode, ln)
+                self.c.movr(t)
+                self.eval(a, ln)
+                self.c.mulr(t)
+                self.release(t)
         else:  # pragma: no cover
             raise _err(ln, f"internal: unknown node {kind}")
 
@@ -265,41 +287,63 @@ class _Compiler:
         self.release(counter)
 
 
-def compile_vhl(src: str) -> ProgramBuilder:
-    comp = _Compiler()
-    comp.c.loadi(1).movr(0)  # R0 = unit, reserved for repeat decrements
-    stack: list[tuple[int, str, str]] = []  # open repeat blocks
+def _uses_extended(node) -> bool:
+    if node[0] in ("inp", "mulvar"):
+        return True
+    return any(isinstance(child, tuple) and _uses_extended(child)
+               for child in node[1:])
 
+
+def _parse_stmts(src: str) -> list[tuple]:
+    stmts = []
     for ln, raw in enumerate(src.splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
         tokens = _tokenize(line, ln)
-
         if tokens == ["}"]:
-            if not stack:
-                raise _err(ln, "unmatched '}'")
-            comp.loop_end(*stack.pop())
+            stmts.append(("close", ln))
             continue
-
         head = tokens[0]
         if head == "let":
             if len(tokens) < 4 or tokens[2] != "=" or not re.fullmatch(
                     r"[A-Za-z_]\w*", tokens[1]) or tokens[1] in KEYWORDS:
                 raise _err(ln, "expected: let NAME = expr")
-            node = _ExprParser(tokens[3:], ln).parse()
-            comp.stmt_let(tokens[1], node, ln)
+            stmts.append(("let", tokens[1],
+                          _ExprParser(tokens[3:], ln).parse(), ln))
         elif head == "print":
-            node = _ExprParser(tokens[1:], ln).parse()
-            comp.stmt_print(node, ln)
+            stmts.append(("print", _ExprParser(tokens[1:], ln).parse(), ln))
         elif head == "repeat":
             if tokens[-1] != "{":
                 raise _err(ln, "expected: repeat expr {")
-            node = _ExprParser(tokens[1:-1], ln).parse()
-            stack.append(comp.loop_begin(node, ln))
+            stmts.append(("repeat", _ExprParser(tokens[1:-1], ln).parse(), ln))
         else:
             raise _err(ln, f"unknown statement {head!r} "
                            "(statements: let, print, repeat)")
+    return stmts
+
+
+def compile_vhl(src: str) -> ProgramBuilder:
+    stmts = _parse_stmts(src)
+    # input() and var*var need the Versor-32 extended opcodes: compile
+    # against icosa32 when they appear, cubic26 otherwise
+    extended = any(_uses_extended(s[-2]) for s in stmts
+                   if s[0] in ("let", "print", "repeat"))
+    comp = _Compiler(decoder="icosa32" if extended else "cubic26")
+    comp.c.loadi(1).movr(0)  # R0 = unit, reserved for repeat decrements
+    stack: list[tuple[int, str, str]] = []  # open repeat blocks
+
+    for stmt in stmts:
+        if stmt[0] == "close":
+            if not stack:
+                raise _err(stmt[1], "unmatched '}'")
+            comp.loop_end(*stack.pop())
+        elif stmt[0] == "let":
+            comp.stmt_let(stmt[1], stmt[2], stmt[3])
+        elif stmt[0] == "print":
+            comp.stmt_print(stmt[1], stmt[2])
+        else:
+            stack.append(comp.loop_begin(stmt[1], stmt[2]))
 
     if stack:
         raise CompileError("unclosed '{' at end of file")
