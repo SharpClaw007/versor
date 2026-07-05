@@ -354,9 +354,10 @@ Minsky reduction (Turing completeness, spec Q1) · robustness maps +
 evolutionary synthesis · G-code/OBJ/STL export ·
 [browser playground](https://sharpclaw007.github.io/versor/playground/)
 (JS port, parity-tested in CI) · execution GIFs · the
-[whitepaper](docs/whitepaper.md). Deliberately deferred to their own design
-rounds: the Sim(3) scale channel (spec Q2), executable memory (Q4), and
-opcodes for icosa32's six reserved cones.
+[whitepaper](docs/whitepaper.md). Next up, designed but not yet built —
+the Sim(3) scale channel (spec Q2), executable memory (Q4), and opcodes
+for icosa32's six reserved cones: see
+[`docs/design-v03.md`](docs/design-v03.md).
 
 ## License
 
