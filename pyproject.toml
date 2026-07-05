@@ -1,10 +1,30 @@
 [project]
 name = "versor"
-version = "0.1.0"
+version = "0.2.0"
 description = "A language where the program is the path: instructions are vectors, programs are polylines through 3D space."
+readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
+authors = [{name = "Juan Reyes"}]
+keywords = ["esolang", "geometry", "quaternion", "interpreter", "visualization"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Interpreters",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 dependencies = ["numpy>=1.26", "matplotlib>=3.8"]
+
+[project.urls]
+Homepage = "https://github.com/SharpClaw007/versor"
+Playground = "https://sharpclaw007.github.io/versor/playground/"
+Whitepaper = "https://github.com/SharpClaw007/versor/blob/main/docs/whitepaper.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
