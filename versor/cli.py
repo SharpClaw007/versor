@@ -96,6 +96,33 @@ def cmd_asm(args) -> int:
     return 0
 
 
+def cmd_export(args) -> int:
+    if not (args.gcode or args.obj or args.stl):
+        print("export: pass at least one of --gcode/--obj/--stl", file=sys.stderr)
+        return 2
+    try:
+        prog = _load_any(args.file)
+    except LoadError as e:
+        print(f"load error: {e}", file=sys.stderr)
+        return 2
+    from . import export
+    trace = Trace()
+    m = Machine(prog, step_budget=args.steps, trace=trace)
+    try:
+        m.run()
+    except VersorFault as f:
+        print(f"-- {f} (exporting the partial trace)", file=sys.stderr)
+    if args.gcode:
+        print(export.to_gcode(trace, args.gcode, feed=args.feed,
+                              scale=args.scale))
+    if args.obj:
+        print(export.to_obj(trace, args.obj, scale=args.scale))
+    if args.stl:
+        print(export.to_stl(trace, args.stl, radius=args.radius,
+                            scale=args.scale))
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="versor",
                                 description="Versor: the program is the path.")
@@ -118,6 +145,17 @@ def main(argv=None) -> int:
     pl = sub.add_parser("lint", help="validate a .vsr/.vasm program")
     pl.add_argument("file")
     pl.set_defaults(fn=cmd_lint)
+
+    pe = sub.add_parser("export", help="export an execution trace as a toolpath/mesh")
+    pe.add_argument("file")
+    pe.add_argument("--gcode", metavar="OUT.nc", help="G-code toolpath")
+    pe.add_argument("--obj", metavar="OUT.obj", help="OBJ polyline")
+    pe.add_argument("--stl", metavar="OUT.stl", help="tube mesh for printing")
+    pe.add_argument("--scale", type=float, default=1.0, help="unit scale")
+    pe.add_argument("--feed", type=float, default=600.0, help="G1 feed rate")
+    pe.add_argument("--radius", type=float, default=0.15, help="STL tube radius")
+    pe.add_argument("--steps", type=int, default=DEFAULT_STEP_BUDGET)
+    pe.set_defaults(fn=cmd_export)
 
     pa = sub.add_parser("asm", help="assemble a .vasm file to .vsr")
     pa.add_argument("file")

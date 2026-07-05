@@ -131,6 +131,9 @@ def _roth(m, n):
 def _out(m, n):
     x = _local_x(m)
     if n >= 2.0 - 1e-9:
+        if not (math.isfinite(x) and 0 <= round(x) < 0x110000):
+            raise VersorFault("InvalidCharCode",
+                              f"OUT char mode with A.x = {x!r}")
         m.OUT.append(chr(round(x)))
     else:
         m.OUT.append(x)
