@@ -19,4 +19,14 @@ jobs:
       - run: pip install -e '.[dev]'
       - run: python -m pytest -q
       - run: python -m versor run examples/countdown.vasm
+      - run: python -m versor run examples/countdown.vhl
       - run: python docs/calcs.py 50000
+
+  js-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test docs/playground/test/parity.test.mjs

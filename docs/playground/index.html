@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Versor Playground</title>
+<style>
+  :root {
+    --bg: #14141c; --panel: #1c1c26; --edge: #2e2e3c;
+    --ink: #e8e8f0; --ink2: #9a9aad;
+    --teal: #14b8a6; --coral: #ff7f50; --purple: #a855f7; --gray: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    display: flex; height: 100vh; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, "Segoe UI", sans-serif; overflow: hidden;
+  }
+  #panel {
+    width: 400px; min-width: 320px; display: flex; flex-direction: column;
+    background: var(--panel); border-right: 1px solid var(--edge); padding: 14px;
+    gap: 10px;
+  }
+  h1 { font-size: 17px; letter-spacing: 0.06em; }
+  h1 a { color: var(--teal); text-decoration: none; }
+  .sub { color: var(--ink2); font-size: 12px; }
+  select, button, input[type=range] {
+    background: #262634; color: var(--ink); border: 1px solid var(--edge);
+    border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--teal); }
+  button.primary { background: var(--teal); color: #04211d; font-weight: 600; }
+  #editor {
+    flex: 1; min-height: 140px; resize: none; background: #101018;
+    color: var(--ink); border: 1px solid var(--edge); border-radius: 8px;
+    padding: 10px; font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: pre; tab-size: 8;
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #status { font: 12px ui-monospace, monospace; color: var(--ink2); min-height: 30px; }
+  #status.err { color: #f87171; }
+  #out {
+    background: #101018; border: 1px solid var(--edge); border-radius: 8px;
+    padding: 8px 10px; min-height: 64px; max-height: 130px; overflow-y: auto;
+    font: 12.5px/1.5 ui-monospace, monospace; color: var(--teal);
+    white-space: pre-wrap;
+  }
+  #view { flex: 1; position: relative; }
+  #hud {
+    position: absolute; top: 12px; right: 14px; text-align: right;
+    font: 12px/1.55 ui-monospace, monospace; color: var(--ink2);
+    pointer-events: none; white-space: pre;
+  }
+  #legend {
+    position: absolute; bottom: 12px; left: 14px; font-size: 12px;
+    color: var(--ink2); display: flex; gap: 14px; pointer-events: none;
+  }
+  #legend span::before {
+    content: ""; display: inline-block; width: 14px; height: 3px;
+    margin-right: 5px; vertical-align: middle; background: currentColor;
+  }
+  .k-data { color: var(--teal); } .k-arith { color: var(--coral); }
+  .k-frame { color: var(--purple); } .k-ctrl { color: var(--gray); }
+  label { color: var(--ink2); font-size: 12px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="panel">
+    <h1>VERSOR <span class="sub">playground</span> <a href="https://github.com/SharpClaw007/versor" title="GitHub">↗</a></h1>
+    <div class="sub">The program is the path. Direction = opcode, magnitude = operand,
+      and the frame decides what everything means. Edit the assembly, run it,
+      watch the machine walk.</div>
+    <div class="row">
+      <select id="example"></select>
+      <button id="run" class="primary">Run</button>
+      <button id="step">Step</button>
+      <button id="play">Play</button>
+      <button id="reset">Reset</button>
+    </div>
+    <textarea id="editor" spellcheck="false"></textarea>
+    <div class="row">
+      <label>speed</label>
+      <input id="speed" type="range" min="1" max="60" value="10" style="flex:1" />
+      <label id="speedval">10/s</label>
+    </div>
+    <div id="status">ready</div>
+    <div id="out"></div>
+  </div>
+  <div id="view">
+    <div id="hud"></div>
+    <div id="legend">
+      <span class="k-data">data</span><span class="k-arith">arithmetic</span>
+      <span class="k-frame">frame</span><span class="k-ctrl">control</span>
+    </div>
+  </div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
