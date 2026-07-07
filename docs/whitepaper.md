@@ -454,6 +454,26 @@ because value polish shrinks the mutation scale below what a cell hop
 needs. Program space being ℝ^{3m} is what makes this trivially available —
 no AST mutation operators, no grammar; just noise on geometry.
 
+**Multi-objective: compute Y while drawing X.** Because a run's trace is
+itself geometry, an *aesthetic* objective — distance between the executed
+polyline and a target shape, after arc-length resampling and
+translation/scale normalization — is a function on the same ℝ^{3m}, and a
+single ES optimizes a lexicographic combination (behavior weighted to
+dominate). Two structural facts govern what is reachable. First, naive
+isotropic mutation stalls immediately: value-carrying magnitudes have
+zero tolerance (§ above), so any useful mutation scale breaks behavior.
+The fix is to let the **robustness map drive the mutation operator**:
+segments below a tolerance threshold are renormalized to their seed
+magnitudes after mutation — their operands never change, their directions
+stay free. Second, reachable shapes are **direction-quantized**: each
+segment is confined to an opcode cone (±20–30°), so a target must be
+compatible with the program's instruction vocabulary — countdown's
+anatomy (a long rightward value stroke plus an aimable loop march) folds
+into a swoosh but cannot fold into a steep V. Under those two rules,
+`examples/shapewrite.py` bends countdown's trace from its native
+staircase (shape distance 1.18) into a swoosh (0.31) while every output
+stays bit-exact, the loop's five laps forming the up-stroke's sawtooth.
+
 ## 9. Computability sketch
 
 Two-counter Minsky machines are Turing complete, and Versor hosts them

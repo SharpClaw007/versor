@@ -130,6 +130,94 @@ def segment_tolerances(prog: Program, *, directions: int = 12,
     return result
 
 
+def run_points(prog: Program, step_budget: int = 20_000):
+    """(OUT buffer, executed-path points) — (None, None) on fault/budget."""
+    from .trace import Trace
+    trace = Trace()
+    m = Machine(prog, trace=trace, step_budget=step_budget)
+    try:
+        with np.errstate(all="ignore"):
+            m.run()
+    except VersorFault:
+        return None, None
+    pts = [np.zeros(3)]
+    for r in trace:
+        if not np.allclose(r.P1, pts[-1]):
+            pts.append(np.asarray(r.P1, dtype=float))
+    return list(m.OUT), np.array(pts)
+
+
+def resample_polyline(pts: np.ndarray, m: int = 64) -> np.ndarray:
+    """m points spaced uniformly by arc length along the polyline."""
+    seg = np.diff(pts, axis=0)
+    lens = np.linalg.norm(seg, axis=1)
+    cum = np.concatenate([[0.0], np.cumsum(lens)])
+    if cum[-1] < 1e-12:
+        return np.repeat(pts[:1], m, axis=0)
+    out = np.empty((m, pts.shape[1]))
+    for i, t in enumerate(np.linspace(0.0, cum[-1], m)):
+        k = min(np.searchsorted(cum, t, side="right") - 1, len(seg) - 1)
+        f = (t - cum[k]) / max(lens[k], 1e-12)
+        out[i] = pts[k] + f * seg[k]
+    return out
+
+
+def _normalized_shape(pts: np.ndarray, m: int) -> np.ndarray:
+    r = resample_polyline(pts, m)
+    r = r - r.mean(axis=0)
+    scale = np.sqrt((r ** 2).sum(axis=1).mean())
+    return r / max(scale, 1e-12)
+
+
+def shape_distance(pts: np.ndarray, target: np.ndarray, m: int = 64) -> float:
+    """Mean pointwise distance between two polylines after arc-length
+    resampling and translation/scale normalization. Orientation is NOT
+    normalized: the target is drawn where it is aimed."""
+    a = _normalized_shape(np.asarray(pts, dtype=float), m)
+    b = _normalized_shape(np.asarray(target, dtype=float), m)
+    return float(np.linalg.norm(a - b, axis=1).mean())
+
+
+def shape_fitness(target_out: list, target_shape, *, weight: float = 100.0,
+                  samples: int = 64):
+    """Compute Y while drawing X: behavioral distance dominates (weighted),
+    trace-shape distance breaks ties. Use with evaluator=run_points."""
+    target_shape = np.asarray(target_shape, dtype=float)
+    fit_out = output_fitness(target_out)
+
+    def fit(res) -> float:
+        out, pts = res
+        b = fit_out(out)
+        s = (shape_distance(pts, target_shape, samples)
+             if pts is not None and len(pts) > 1 else 10.0)
+        return weight * b + s
+
+    return fit
+
+
+def tolerance_mask(prog: Program, threshold: float = 0.02, **kw) -> np.ndarray:
+    """Boolean mask over segments: True where perturbation tolerance is
+    below `threshold` — the value-carrying, magnitude-frozen geometry."""
+    tols = np.array([t for _, t in segment_tolerances(prog, **kw)])
+    return tols < threshold
+
+
+def magnitude_locked_mutation(seed_vectors: np.ndarray, locked: np.ndarray):
+    """Mutation operator that renormalizes locked segments back to their
+    seed magnitudes: direction stays free, the operand never changes. This
+    is the robustness map acting as evolution's stiffness mask."""
+    seed_norms = np.linalg.norm(seed_vectors, axis=1)
+
+    def mutate(parent: np.ndarray, sigma: float, lam: int, rng) -> np.ndarray:
+        kids = parent[None] + rng.normal(scale=sigma, size=(lam, *parent.shape))
+        norms = np.linalg.norm(kids, axis=2)
+        factor = np.where(locked[None, :],
+                          seed_norms[None, :] / np.maximum(norms, 1e-12), 1.0)
+        return kids * factor[:, :, None]
+
+    return mutate
+
+
 def output_fitness(target: list, tol: float = 1e-4):
     """Fitness (lower = better, 0 = match within tol): distance between OUT
     buffers, with penalties for faults, non-halting, and length mismatch."""
@@ -152,24 +240,32 @@ def output_fitness(target: list, tol: float = 1e-4):
 
 def evolve(topology: Program, fitness, *, sigma: float = 0.3,
            lam: int = 16, generations: int = 300, seed: int = 0,
-           step_budget: int = 20_000):
+           step_budget: int = 20_000, evaluator=None, mutate=None):
     """(1+lambda) evolution strategy over all segment vectors.
 
-    `fitness` maps an OUT buffer (or None on fault) to a score to
-    minimize. Sigma adapts by a 1/5-success-style rule. Returns
-    (best_program, history) where history is the best score per
-    generation; stops early at fitness 0.
+    `evaluator` maps a program to whatever `fitness` scores (default:
+    run_out, so `fitness` sees the OUT buffer — use run_points +
+    shape_fitness for trace-shape objectives). `mutate` overrides the
+    default isotropic Gaussian (see magnitude_locked_mutation). Sigma
+    adapts by a 1/5-success-style rule with a stall re-expansion. Returns
+    (best_program, history); stops early at fitness 0.
     """
     rng = np.random.default_rng(seed)
+    if evaluator is None:
+        def evaluator(p):
+            return run_out(p, step_budget)
+    if mutate is None:
+        def mutate(parent, s, k, r):
+            return parent[None] + r.normal(scale=s, size=(k, *parent.shape))
     x = get_vectors(topology)
-    best = fitness(run_out(topology, step_budget))
+    best = fitness(evaluator(topology))
     history = [best]
     stall = 0
     for _ in range(generations):
         if best == 0.0:
             break
-        children = x[None] + rng.normal(scale=sigma, size=(lam, *x.shape))
-        scores = [fitness(run_out(set_vectors(topology, c), step_budget))
+        children = mutate(x, sigma, lam, rng)
+        scores = [fitness(evaluator(set_vectors(topology, c)))
                   for c in children]
         k = int(np.argmin(scores))
         if scores[k] < best:

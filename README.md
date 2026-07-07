@@ -329,6 +329,17 @@ treat it as one (whitepaper §8):
   </tr>
 </table>
 
+And the flagship trick — **compute Y while drawing X**. Behavior and shape
+are both functions of the same geometry, so one evolution strategy can
+optimize both at once: below, countdown keeps printing 5 4 3 2 1 *exactly*
+while its trace is bent into a swoosh. Mutation is masked by the robustness
+map (value-carrying segments keep their magnitudes — their lengths <em>are</em>
+the outputs — and contribute direction only), and the loop's five laps
+become the sawtooth of the up-stroke: the iteration is part of the glyph.
+Regenerate with `python examples/shapewrite.py`.
+
+<img src="docs/screenshots/shapewrite.png" alt="Before/after: countdown's staircase trace evolved into a swoosh shape while still printing 5 4 3 2 1" width="100%" />
+
 ## M6 — the icosahedral dialect & program interpolation
 
 **`icosa32` decoder.** Icosahedral symmetry has orbit sizes 12/20/30, so a
