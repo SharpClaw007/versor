@@ -34,8 +34,11 @@ from __future__ import annotations
 
 import re
 
-from .builder import ProgramBuilder, arm
+import numpy as np
+
+from .builder import ChainBuilder, ProgramBuilder, arm
 from .errors import LoadError
+from .route import route
 
 NUM_RE = r"\d+(?:\.\d+)?"
 TOKEN_RE = re.compile(rf"\s*({NUM_RE}|[A-Za-z_]\w*|[(),+\-*={{}}])")
@@ -260,21 +263,175 @@ def _stmts_use_extended(stmts) -> bool:
 
 # ---------- code generation ----------
 
+SPILL_BASE = np.array([300.0, -300.0, 0.0])  # first slot's cell corner
+SPILL_STRIDE = 2.0                           # cells between slots (x axis)
+
+
+class _TrackedChain(ChainBuilder):
+    """ChainBuilder that reports every emission to the compiler so it can
+    maintain the machine's statically-known position (the basis of routed
+    spilling)."""
+
+    tracker = None
+
+    def _emit(self, local_vec, to=None):
+        raw = self._Fa.rotate(np.asarray(local_vec, dtype=float))
+        super()._emit(local_vec, to)
+        if self.tracker is not None:
+            self.tracker.on_move(raw, to)
+        return self
+
+    def seg_raw(self, raw_vec, to=None):
+        super().seg_raw(raw_vec, to)
+        if self.tracker is not None:
+            self.tracker.on_move(np.asarray(raw_vec, dtype=float), to)
+        return self
+
+    def branch(self, *arms):
+        super().branch(*arms)
+        return self
+
+    def label(self, name):
+        super().label(name)
+        if self.tracker is not None:
+            self.tracker.on_label(name)
+        return self
+
+    def at(self, name):
+        super().at(name)
+        if self.tracker is not None:
+            self.tracker.on_at(name)
+        return self
+
+
 class _ChainCompiler:
-    def __init__(self, chain, fn_ids: dict[str, tuple[int, int]]):
+    def __init__(self, chain, fn_ids: dict[str, tuple[int, int]],
+                 decoder: str = "cubic26", track: bool = False):
         self.c = chain
         self.fn_ids = fn_ids  # name -> (chain id, arity)
-        self.vars: dict[str, int] = {}
+        self.decoder = decoder
+        self.vars: dict[str, tuple[str, int]] = {}  # name -> (kind, reg|slot)
         self.free = [3, 2, 1]
         self.owners: dict[int, str] = {}
         self.label_n = 0
+        self.track = track
+        self.pos = np.zeros(3) if track else None
+        self.labels_pos: dict[str, np.ndarray | None] = {}
+        self.n_slots = 0
+        if track and isinstance(chain, _TrackedChain):
+            chain.tracker = self
+
+    # --- position bookkeeping (tracker callbacks) ---
+
+    def on_move(self, raw: np.ndarray, to):
+        if self.pos is not None:
+            self.pos = self.pos + raw
+        if isinstance(to, str):
+            self.pos = self.labels_pos.get(to)
+
+    def on_label(self, name: str):
+        self.labels_pos[name] = None if self.pos is None else self.pos.copy()
+
+    def on_at(self, name: str):
+        if name in self.labels_pos:
+            p = self.labels_pos[name]
+            self.pos = None if p is None else p.copy()
+        # unknown label (dead-code vertex): keep current pos; never executed
+
+    def dir_vec(self, mnemonic: str, n: float) -> np.ndarray:
+        return self.c._dirs[mnemonic] * n
+
+    def route_to(self, target: np.ndarray, ln: int):
+        """Emit harmless movers taking the machine from self.pos to target.
+        Requires A dead and R0 = unit."""
+        if self.pos is None:
+            raise _err(ln, "spill needs a statically-known position — a "
+                           "function call made it unknown here")
+        for mnemonic, n in route(target - self.pos, self.decoder):
+            self.c.op(mnemonic, n)
+
+    # --- spill slots ---
+
+    def slot_center(self, k: int) -> np.ndarray:
+        return SPILL_BASE + np.array([SPILL_STRIDE * k + 0.5, 0.5, 0.5])
+
+    def store_a_to_slot(self, k: int, ln: int):
+        """A (live) -> M[slot k]. Parks A on the data stack while routing."""
+        center = self.slot_center(k)
+        popa_vec = self.dir_vec("POPA", 1.0)
+        store_vec = self.dir_vec("STORE", 0.5)
+        self.c.pusha()
+        self.route_to(center - store_vec - popa_vec, ln)
+        self.c.popa()
+        self.c.store(0.5)
+
+    def load_slot_to_a(self, k: int, ln: int):
+        """M[slot k] -> A. A is dead before a load by construction."""
+        center = self.slot_center(k)
+        load_vec = self.dir_vec("LOAD", 0.5)
+        self.route_to(center - load_vec, ln)
+        self.c.load(0.5)
+
+    def spill_all_reg_vars(self, ln: int):
+        """Move every register-resident variable to memory. Called before
+        loops and branches: a variable's home must be identical at every
+        join point (loop tops, arm merges) — a mid-body victimization would
+        be compiled once but executed every iteration, clobbering the
+        variable's live slot with stale register contents."""
+        if not self.track:
+            return
+        for r in sorted(list(self.owners)):
+            w = self.owners.get(r, "")
+            if not (w.startswith("var ") or w.startswith("param ")):
+                continue
+            if self.pos is None:
+                raise _err(ln, "register pressure at a loop/branch needs a "
+                               "statically-known position — a function call "
+                               "made it unknown here")
+            name = w.split(" ", 1)[1]
+            k = self.n_slots
+            self.n_slots += 1
+            self.c.mova(r)
+            self.store_a_to_slot(k, ln)
+            self.vars[name] = ("mem", k)
+            self.release(r)
+
+    def spill_victim(self, ln: int) -> int:
+        """Move one register-resident variable to a memory slot; free its
+        register. A may be live: it rides the data stack around the trip."""
+        candidates = sorted(r for r, w in self.owners.items()
+                            if w.startswith("var ") or w.startswith("param "))
+        if not candidates:
+            return -1
+        if not self.track:
+            return -1
+        if self.pos is None:
+            raise _err(ln, "out of registers, and spilling needs a "
+                           "statically-known position — a function call "
+                           "made it unknown here")
+        r = candidates[0]
+        name = self.owners[r].split(" ", 1)[1]
+        k = self.n_slots
+        self.n_slots += 1
+        self.c.pusha()          # save live A
+        self.c.mova(r)          # A = victim value
+        self.store_a_to_slot(k, ln)
+        self.c.popa()           # restore A
+        self.vars[name] = ("mem", k)
+        self.release(r)
+        return r
 
     def alloc(self, what: str, ln: int) -> int:
         if not self.free:
+            spilled = self.spill_victim(ln)
+            if spilled >= 0:
+                self.owners[spilled] = what
+                self.free.remove(spilled)
+                return spilled
             held = ", ".join(f"R{r} = {w}" for r, w in sorted(self.owners.items()))
             raise _err(ln, f"out of registers allocating {what} "
-                           f"(3 available; held: {held}). Spilling to "
-                           "spatial memory is not implemented")
+                           f"(3 available; held: {held}). Spilling applies "
+                           "only to named variables in main")
         r = self.free.pop()
         self.owners[r] = what
         return r
@@ -314,12 +471,17 @@ class _ChainCompiler:
             name = node[1]
             if name not in self.vars:
                 raise _err(ln, f"undefined variable {name!r}")
-            self.c.mova(self.vars[name])
+            where, idx = self.vars[name]
+            if where == "reg":
+                self.c.mova(idx)
+            else:
+                self.load_slot_to_a(idx, ln)
         elif kind == "add":
             for a, b in ((node[1], node[2]), (node[2], node[1])):
-                if b[0] == "var" and b[1] in self.vars:
+                if (b[0] == "var" and b[1] in self.vars
+                        and self.vars[b[1]][0] == "reg"):
                     self.eval(a, ln)
-                    self.c.add(self.vars[b[1]])
+                    self.combine_commutative("add", b, ln)
                     return
             t = self.alloc("add-temp", ln)
             self.eval(node[1], ln)
@@ -328,9 +490,20 @@ class _ChainCompiler:
             self.c.add(t)
             self.release(t)
         elif kind == "sub":
-            if node[2][0] == "var" and node[2][1] in self.vars:
+            if (node[2][0] == "var" and node[2][1] in self.vars
+                    and self.vars[node[2][1]][0] == "reg"):
                 self.eval(node[1], ln)
-                self.c.sub(self.vars[node[2][1]])
+                w = self.vars[node[2][1]]
+                if w[0] == "reg":  # still there after evaluating the left
+                    self.c.sub(w[1])
+                    return
+                # spilled during eval(left): left is in A, right in memory
+                t = self.alloc("sub-temp", ln)
+                self.c.movr(t)                      # t = left
+                self.load_slot_to_a(w[1], ln)       # A = right
+                self.c.swap(t)                      # A = left, t = right
+                self.c.sub(t)                       # A = left - right
+                self.release(t)
                 return
             t = self.alloc("sub-temp", ln)
             self.eval(node[2], ln)
@@ -355,12 +528,14 @@ class _ChainCompiler:
             self.c.inp()
         elif kind == "mulvar":
             a, b = node[1], node[2]
-            if b[0] == "var" and b[1] in self.vars:
+            if (b[0] == "var" and b[1] in self.vars
+                    and self.vars[b[1]][0] == "reg"):
                 self.eval(a, ln)
-                self.c.mulr(self.vars[b[1]])
-            elif a[0] == "var" and a[1] in self.vars:
+                self.combine_commutative("mulr", b, ln)
+            elif (a[0] == "var" and a[1] in self.vars
+                    and self.vars[a[1]][0] == "reg"):
                 self.eval(b, ln)
-                self.c.mulr(self.vars[a[1]])
+                self.combine_commutative("mulr", a, ln)
             else:
                 t = self.alloc("mul-temp", ln)
                 self.eval(b, ln)
@@ -373,43 +548,110 @@ class _ChainCompiler:
         else:  # pragma: no cover
             raise _err(ln, f"internal: unknown node {kind}")
 
+    def combine_commutative(self, op_name: str, var_node, ln: int):
+        """A = A <op> var, tolerating the variable having been spilled while
+        the left operand was evaluated (evaluation can trigger a spill, so
+        location must be re-checked at emission time)."""
+        w = self.vars[var_node[1]]
+        if w[0] == "reg":
+            getattr(self.c, op_name)(w[1])
+            return
+        t = self.alloc(f"{op_name}-temp", ln)
+        self.c.movr(t)                  # t = left operand
+        self.load_slot_to_a(w[1], ln)   # A = spilled variable
+        getattr(self.c, op_name)(t)     # commutative: A = var <op> left
+        self.release(t)
+
     def eval_call(self, name: str, args: list, ln: int):
         if name not in self.fn_ids:
             raise _err(ln, f"undefined function {name!r}")
         cid, arity = self.fn_ids[name]
         if len(args) != arity:
             raise _err(ln, f"{name} takes {arity} argument(s), got {len(args)}")
-        live = sorted(self.owners)  # registers to survive the call
+        # In tracked main, the result-park register is reserved BEFORE the
+        # call: allocating it afterwards could need a spill, and the call
+        # makes the position unknown. In functions (no spilling) parking
+        # stays lazy — argument temps are released again by call time.
+        park = None
+        if self.track and self.owners:
+            park = self.alloc("call-result", ln)
+        live = sorted(r for r in self.owners if r != park)
         for r in live:
             self.c.mova(r).pusha()
         for a in args:
             self.eval(a, ln)
             self.c.pusha()
         self.c.call(cid)
+        if self.track:
+            self.pos = None  # the callee's displacement is data-dependent
         if live:
-            park = self.alloc("call-result", ln)
+            if park is None:
+                park = self.alloc("call-result", ln)
             self.c.popa().movr(park)
             for r in reversed(live):
                 self.c.popa().movr(r)
             self.c.mova(park)
-            self.release(park)
         else:
             self.c.popa()
+        if park is not None:
+            self.release(park)
 
     # --- statements ---
 
     def stmt_let(self, name: str, node, ln: int):
         self.eval(node, ln)
         if name not in self.vars:
-            self.vars[name] = self.alloc(f"var {name}", ln)
-        self.c.movr(self.vars[name])
+            self.vars[name] = ("reg", self.alloc(f"var {name}", ln))
+        where, idx = self.vars[name]
+        if where == "reg":
+            self.c.movr(idx)
+        else:
+            self.store_a_to_slot(idx, ln)
+
+    def merge_label_pos(self, name: str, value):
+        """Register a label's static position; an unknown (None) wins so
+        dirtiness propagates through merges."""
+        if name in self.labels_pos and (self.labels_pos[name] is None
+                                        or value is None):
+            self.labels_pos[name] = None
+        elif name not in self.labels_pos:
+            self.labels_pos[name] = None if value is None else value.copy()
 
     def branch_on_a(self, pos_label: str, nonpos_label: str):
         """expr > 0 goes to pos_label; zero ties exit to nonpos_label."""
+        if self.track:
+            arm_pos = (None if self.pos is None
+                       else self.pos + self.dir_vec("NOP", 1.0))
+            self.merge_label_pos(pos_label, arm_pos)
+            self.merge_label_pos(nonpos_label, arm_pos)
         self.c.branch(
             arm("NOP", 1.0, guard=(-1, 0, 0), to=nonpos_label),
             arm("NOP", 1.0, guard=(1, 0, 0), to=pos_label),
         )
+
+    def close_cycle_to(self, top: str, end: str, ln: int):
+        """Pad the loop body so one full cycle has zero net displacement —
+        position becomes trip-count-independent, which spilling requires.
+        A is dead at statement boundaries, so raw movers are safe."""
+        if not self.track:
+            return
+        top_pos = self.labels_pos.get(top)
+        if self.pos is None or top_pos is None:
+            self.merge_label_pos(end, None)
+            return
+        self.route_to(top_pos - self.dir_vec("NOP", 1.0), ln)
+
+    def close_arm_to(self, arm_label: str, end: str, ln: int):
+        """Route the current if-arm back to the arms' shared entry point so
+        both sides of the branch converge at the same static position."""
+        if not self.track:
+            return
+        arm_entry = self.labels_pos.get(arm_label)
+        if self.pos is None or arm_entry is None:
+            self.merge_label_pos(end, None)
+            return
+        self.route_to(arm_entry, ln)
+        self.merge_label_pos(end, arm_entry + self.dir_vec("NOP", 1.0))
 
     def run(self, stmts, *, fn_exit: str | None = None):
         stack: list[tuple] = []
@@ -428,6 +670,7 @@ class _ChainCompiler:
                 self.c.at(self.fresh("dead"))
             elif kind == "repeat":
                 node, ln = stmt[1], stmt[2]
+                self.spill_all_reg_vars(ln)
                 self.eval(node, ln)
                 counter = self.alloc("repeat counter", ln)
                 self.c.movr(counter)
@@ -437,49 +680,55 @@ class _ChainCompiler:
                 self.c.mova(counter)
                 self.branch_on_a(body, end)
                 self.c.at(body)
-                stack.append(("repeat", counter, top, end))
+                stack.append(("repeat", counter, top, end, ln))
             elif kind == "while":
                 node, ln = stmt[1], stmt[2]
+                self.spill_all_reg_vars(ln)
                 top, body, end = (self.fresh("wt"), self.fresh("wb"),
                                   self.fresh("we"))
                 self.c.label(top)
                 self.eval(node, ln)
                 self.branch_on_a(body, end)
                 self.c.at(body)
-                stack.append(("while", top, end))
+                stack.append(("while", top, end, ln))
             elif kind == "if":
                 node, ln = stmt[1], stmt[2]
+                self.spill_all_reg_vars(ln)
                 then, other, end = (self.fresh("it"), self.fresh("ie"),
                                     self.fresh("ix"))
                 self.eval(node, ln)
                 self.branch_on_a(then, other)
                 self.c.at(then)
-                stack.append(("if", other, end, False))
+                stack.append(("if", other, end, False, ln))
             elif kind == "else":
                 if not stack or stack[-1][0] != "if":
                     raise _err(stmt[1], "'} else {' without a matching if")
-                _, other, end, seen = stack.pop()
+                _, other, end, seen, ln0 = stack.pop()
                 if seen:
                     raise _err(stmt[1], "duplicate else")
+                self.close_arm_to(other, end, stmt[1])
                 self.c.op("NOP", 1.0, to=end)
                 self.c.at(other)
-                stack.append(("if", other, end, True))
+                stack.append(("if", other, end, True, ln0))
             elif kind == "close":
                 if not stack:
                     raise _err(stmt[1], "unmatched '}'")
                 block = stack.pop()
                 if block[0] == "repeat":
-                    _, counter, top, end = block
+                    _, counter, top, end, ln0 = block
                     self.c.mova(counter).sub(0).movr(counter)
+                    self.close_cycle_to(top, end, ln0)
                     self.c.op("NOP", 1.0, to=top)
                     self.c.at(end)
                     self.release(counter)
                 elif block[0] == "while":
-                    _, top, end = block
+                    _, top, end, ln0 = block
+                    self.close_cycle_to(top, end, ln0)
                     self.c.op("NOP", 1.0, to=top)
                     self.c.at(end)
                 else:  # if
-                    _, other, end, seen = block
+                    _, other, end, seen, ln0 = block
+                    self.close_arm_to(other, end, ln0)
                     self.c.op("NOP", 1.0, to=end)
                     if not seen:
                         self.c.at(other)
@@ -489,29 +738,40 @@ class _ChainCompiler:
             raise CompileError("unclosed '{' at end of file")
 
 
+def _main_var_count(stmts) -> int:
+    return len({s[1] for s in stmts if s[0] == "let"})
+
+
 def compile_vhl(src: str) -> ProgramBuilder:
     main_stmts, fns = _parse_units(src)
-    extended = (bool(fns) or _stmts_use_extended(main_stmts)
+    will_spill = _main_var_count(main_stmts) > 3
+    extended = (will_spill or bool(fns) or _stmts_use_extended(main_stmts)
                 or any(_stmts_use_extended(body) for _, body, _ in fns.values()))
-    b = ProgramBuilder("vhl", decoder="icosa32" if extended else "cubic26")
+    decoder = "icosa32" if extended else "cubic26"
+    b = ProgramBuilder("vhl", decoder=decoder)
 
-    main_chain = b.chain("main")
+    if will_spill:
+        main_chain = _TrackedChain(0, "main", b._dirs)
+        b.chains.append(main_chain)
+    else:
+        main_chain = b.chain("main")
     fn_ids = {name: (1 + i, len(params))
               for i, (name, (params, _b, _ln)) in enumerate(fns.items())}
 
-    mc = _ChainCompiler(main_chain, fn_ids)
+    mc = _ChainCompiler(main_chain, fn_ids, decoder=decoder, track=will_spill)
     mc.c.loadi(1).movr(0)  # R0 = unit, reserved (shared by all chains)
     mc.run(main_stmts)
     mc.c.halt()
 
     for name, (params, body, decl_ln) in fns.items():
         chain = b.chain(f"fn {name}")
-        fc = _ChainCompiler(chain, fn_ids)
+        fc = _ChainCompiler(chain, fn_ids, decoder=decoder)
         exit_label = "fnexit"
         # parameters arrive on the data stack, last argument on top
         for p in reversed(params):
-            fc.vars[p] = fc.alloc(f"param {p}", decl_ln)
-            fc.c.popa().movr(fc.vars[p])
+            r = fc.alloc(f"param {p}", decl_ln)
+            fc.vars[p] = ("reg", r)
+            fc.c.popa().movr(r)
         fc.run(body, fn_exit=exit_label)
         if not body or body[-1][0] != "return":
             fc.zero_a(decl_ln)  # fell off the end: return 0

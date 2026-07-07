@@ -146,7 +146,14 @@ Statements: `let`, `print`, `return`, `repeat/while/if expr { ... }`
 `input()`, and calls; `*` by a constant compiles to SCALE,
 variable×variable to MULR. Functions use a data-stack calling convention
 (PUSHA/POPA; caller saves live registers), so any of fn/input()/var×var
-selects the icosa32 dialect. Three general registers — no spilling.
+selects the icosa32 dialect. Programs with more than three live variables
+**spill to spatial memory**: the compiler tracks the machine's static
+position, closes every loop body and if-arm to zero net displacement (so
+position is trip-count-independent), and routes to per-variable cells with
+harmless mover instructions (`versor/route.py`) — register allocation as
+path planning. Variables spill wholesale at loop/branch entry so their
+homes are identical at every join point. Expression temporaries never
+spill, and position (hence spilling) is lost after a function call.
 
 ## Faults
 

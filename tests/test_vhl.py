@@ -130,10 +130,20 @@ class TestErrors:
         with pytest.raises(CompileError, match=match):
             compile_vhl(src)
 
-    def test_out_of_registers(self):
-        src = "let a = 1\nlet b = 2\nlet c = 3\nlet d = 4"
+    def test_out_of_registers_on_temp_pressure(self):
+        # named variables spill to spatial memory now; expression
+        # temporaries cannot, so deep unfoldable nesting still exhausts
+        src = ("print (((input()+input())+(input()+input())) + "
+               "((input()+input())+(input()+input()))) * "
+               "(input()+input())")
         with pytest.raises(CompileError, match="out of registers"):
             compile_vhl(src)
+
+    def test_four_variables_spill_instead_of_failing(self):
+        src = "let a = 1\nlet b = 2\nlet c = 3\nlet d = 4\nprint a + d"
+        from versor import Machine
+        assert Machine(compile_vhl(src).build(),
+                       step_budget=100000).run().out == [pytest.approx(5.0)]
 
     def test_error_lines(self):
         with pytest.raises(CompileError, match="line 2"):

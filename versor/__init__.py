@@ -8,6 +8,7 @@ from .interp import classify, lerp_programs
 from .loader import Program, from_dict, load, save, to_dict
 from .machine import Machine, RunResult, run_program
 from .quat import Quat
+from .route import route, route_displacement
 from .trace import Trace
 
 __version__ = "0.4.0"
@@ -17,5 +18,6 @@ __all__ = [
     "Machine", "RunResult", "run_program", "Quat", "Trace",
     "DECODERS", "get_decoder", "classify", "lerp_programs",
     "AsmError", "assemble", "assemble_path",
-    "SpecializeError", "specialize", "__version__",
+    "SpecializeError", "specialize", "route", "route_displacement",
+    "__version__",
 ]
