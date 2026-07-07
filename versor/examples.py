@@ -190,6 +190,30 @@ def zoom(depth: int = 8) -> ProgramBuilder:
     return b
 
 
+def levy(depth: int = 7) -> ProgramBuilder:
+    """The Lévy C curve, authored *naively*: every level chain assumes it is
+    entered under the identity frame (turn 45°, recurse at 1/√2 scale, turn
+    −90°, recurse, turn 45°). Run directly, this breaks — each callee is
+    entered under its caller's accumulated rotation and its segments
+    reinterpret. Run through versor.clone.specialize(), which clones each
+    level per entry frame, it draws the fractal. This is the v0.3 casualty
+    (whitepaper §12.1) made runnable by the compiler transform.
+    """
+    b = ProgramBuilder("levy")
+    b.chain("entry").call(1).halt()
+    for k in range(1, depth + 1):
+        c = b.chain(f"level {k}")
+        if k == depth:
+            c.nop(3.0)
+        else:
+            c.roth(math.pi / 4)
+            c.call(k + 1, scale=2 ** -0.5)
+            c.roth(3 * math.pi / 2)
+            c.call(k + 1, scale=2 ** -0.5)
+            c.roth(math.pi / 4)
+    return b
+
+
 ALL = {
     "straightline": straightline,
     "countdown": countdown,

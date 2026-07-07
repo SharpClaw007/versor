@@ -340,6 +340,25 @@ Regenerate with `python examples/shapewrite.py`.
 
 <img src="docs/screenshots/shapewrite.png" alt="Before/after: countdown's staircase trace evolved into a swoosh shape while still printing 5 4 3 2 1" width="100%" />
 
+## The compiler transform: orientation specialization
+
+A callee's raw vectors decode under the caller's *live* frame, so recursive
+geometry with turns (Koch, Lévy) is impossible to author directly — every
+rotated call site silently reinterprets the callee
+(`versor/clone.py` docstring has the algebra). `specialize()` fixes it the
+way a compiler would: one clone of each chain per reachable entry frame,
+segments conjugated by `v ↦ FvF⁻¹`, CALLs retargeted. Guards are untouched,
+so *intentional* frame-dependence (orientation-as-argument) survives; only
+the accidental reinterpretation is removed. The clone set is finite exactly
+when the rotation angles generate a finite group.
+
+<img src="examples/renders/levy.png" alt="The Levy C curve drawn by a specialized recursive Versor program, viewed from above" width="70%" />
+
+<sub><b>levy.vsr</b> — the Lévy C curve, authored naively (turn 45°, recurse
+at 1/√2 scale, turn −90°, recurse, turn 45°), which faults if run directly.
+`specialize()` expands 8 chains into 31 orientation clones and the fractal
+draws itself: cloning × the Sim(3) scale channel, composed.</sub>
+
 ## M6 — the icosahedral dialect & program interpolation
 
 **`icosa32` decoder.** Icosahedral symmetry has orbit sizes 12/20/30, so a

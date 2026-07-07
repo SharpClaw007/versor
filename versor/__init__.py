@@ -1,6 +1,7 @@
 """Versor — a language where the program is the path."""
 from .asm import AsmError, assemble, assemble_path
 from .builder import ProgramBuilder, arm, arm_seg
+from .clone import SpecializeError, specialize
 from .decode import DECODERS, get_decoder
 from .errors import LoadError, VersorFault
 from .interp import classify, lerp_programs
@@ -15,5 +16,6 @@ __all__ = [
     "Program", "from_dict", "load", "save", "to_dict",
     "Machine", "RunResult", "run_program", "Quat", "Trace",
     "DECODERS", "get_decoder", "classify", "lerp_programs",
-    "AsmError", "assemble", "assemble_path", "__version__",
+    "AsmError", "assemble", "assemble_path",
+    "SpecializeError", "specialize", "__version__",
 ]

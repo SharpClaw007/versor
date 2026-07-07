@@ -30,6 +30,21 @@ def main():
                       for o in res.out).strip()
         print(f"{name:14s} {res.steps:4d} steps  out={out!r}  -> {png}")
 
+    # levy: authored naively, made runnable by orientation specialization
+    from versor.clone import specialize
+    from versor.examples import levy
+    from versor.loader import save
+    spec = specialize(levy(9).build())
+    save(spec, os.path.join(HERE, "levy.vsr"))
+    trace = Trace()
+    m = Machine(spec, trace=trace, step_budget=500_000)
+    m.run()
+    png = render(trace, os.path.join(RENDERS, "levy.png"),
+                 title="levy.vsr — naive recursion, specialized per entry frame",
+                 elev=90, azim=-90)
+    print(f"{'levy':14s} {len(trace):4d} steps  (specialized: "
+          f"{len(spec.chains)} chains) -> {png}")
+
     # wide hero shot for the README masthead
     trace = Trace()
     Machine(ALL["helix"]().build(), trace=trace).run()
