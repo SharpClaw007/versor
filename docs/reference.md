@@ -126,18 +126,27 @@ loop:   OUT                  ; label: names the vertex before the next op
 ## VHL (`.vhl`)
 
 ```
-let x = input()          # input()/var*var auto-select icosa32
-let y = x * x + 3
-print y
-repeat y - 1 {
-    print 1
+fn fib(n) {                  # functions compile to chains; recursion works
+    if n - 2 {               # if/while test: expr > 0
+        return fib(n - 1) + fib(n - 2)
+    }
+    if n { return 1 }        # (block braces per line: `if n {` ... `}`)
+    return 0                 # falling off the end returns 0
 }
+let i = 1
+while 10 - i {
+    print fib(i)
+    let i = i + 1
+}
+repeat 2 { print 0 }         # repeat: counted-loop sugar, runs ceil(n) times
 ```
 
-Statements: `let NAME = expr`, `print expr`, `repeat expr { ... }` (runs
-⌈n⌉ times, skips n ≤ 0). Expressions: `+ − * ( )` with constant folding;
-`*` by a constant compiles to SCALE, variable×variable to MULR. Three
-general registers — no spilling (that's a path-planning problem).
+Statements: `let`, `print`, `return`, `repeat/while/if expr { ... }`
+(`} else {` on one line). Expressions: `+ − * ( )` with constant folding,
+`input()`, and calls; `*` by a constant compiles to SCALE,
+variable×variable to MULR. Functions use a data-stack calling convention
+(PUSHA/POPA; caller saves live registers), so any of fn/input()/var×var
+selects the icosa32 dialect. Three general registers — no spilling.
 
 ## Faults
 
